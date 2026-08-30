@@ -5,6 +5,7 @@ Flask-Migrate==4.0.7
 psycopg2-binary==2.9.9
 requests==2.32.3
 celery==5.4.0
+flower==2.0.1
 redis==5.0.8
 gunicorn==22.0.0
 python-dotenv==1.0.1
