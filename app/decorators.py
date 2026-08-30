@@ -3,6 +3,8 @@ from functools import wraps
 from flask import current_app, request
 from flask_jwt_extended import jwt_required, get_jwt
 
+from app.responses import error
+
 
 def role_required(*roles):
     """RBAC guard — requires a valid JWT and a matching `role` claim."""
@@ -12,7 +14,7 @@ def role_required(*roles):
         @jwt_required()
         def wrapper(*args, **kwargs):
             if get_jwt().get("role") not in roles:
-                return {"error": "forbidden"}, 403
+                return error("forbidden", 403)
             return fn(*args, **kwargs)
 
         return wrapper
@@ -27,7 +29,7 @@ def api_key_required(fn):
     def wrapper(*args, **kwargs):
         provided = request.headers.get("x-api-key")
         if not provided or provided != current_app.config["MOCK_TRIGGER_API_KEY"]:
-            return {"error": "forbidden"}, 403
+            return error("forbidden", 403)
         return fn(*args, **kwargs)
 
     return wrapper

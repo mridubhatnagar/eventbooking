@@ -52,18 +52,18 @@ User (1)──< Booking >──(1) Event
 
 ## Payment Flow (mocked Razorpay, frozen)
 
-No real payment gateway integration — Razorpay is simulated, but the flow mirrors how a real webhook-driven integration would work so the webhook receiver is genuine, reusable code.
+No real payment gateway integration — Razorpay is simulated on both sides (outbound order creation and inbound webhook delivery), but the flow mirrors how a real integration would work so the webhook receiver and the order-creation caller are genuine, reusable code — only the two mock endpoints they talk to (`/mock/razorpay/orders`, `/mock/razorpay/simulate-webhook`) are throwaway.
 
 Payment's status fields (`gateway_status`, `status`) and `order_id` are defined in the Data Model above.
 
 **Flow**:
-1. Booking created (sync, in-request) → `Payment` row created: `status=PENDING`, `gateway_status=created`, `order_id` set (mocked gateway-issued reference).
+1. Booking created (sync, in-request) → calls `POST /mock/razorpay/orders` (mocked Razorpay Orders API, HTTP Basic Auth via `RAZORPAY_KEY_ID`/`KEY_SECRET` — same credentials a real `razorpay-python` client would use) to get a gateway-issued `order_id`, then creates the `Payment` row: `status=PENDING`, `gateway_status=created`. If the order-creation call fails, the whole booking rolls back (no partial state) and the API returns a clean `502`.
 2. Celery Task A runs: sets `status=REQUESTED`, `gateway_status=captured` (simulates the request reaching the gateway). Schedules a follow-up trigger via `countdown=N` to simulate gateway processing latency.
 3. On the delayed trigger firing, a **mock endpoint** (e.g. `POST /mock/razorpay/simulate-webhook`) builds a fake Razorpay event payload — including `order_id` and a fake signature — and calls the **real webhook receiver** via an actual HTTP request — this is the only throwaway piece.
 4. **Webhook receiver** (e.g. `POST /webhooks/razorpay`) — genuine, reusable code (would be unchanged if a real Razorpay integration replaced the mock trigger later). Verifies the signature (not JWT), looks up `Payment` by `order_id`, updates `status` to `PROCESSED` or `FAILED` and `gateway_status` accordingly.
 5. Only on `PROCESSED`: enqueues the **Booking Confirmation** Celery task (see Background Tasks above). `FAILED` leaves the booking unconfirmed, no email sent.
 
-**Operational note**: the mock trigger's HTTP self-call means the Celery worker container needs network reachability to the web service (e.g. `http://web:5000/webhooks/razorpay` in docker-compose) — factor into Docker compose service design.
+**Operational note**: the mock trigger's HTTP self-call means the Celery worker container needs network reachability to the app service (e.g. `http://app:5000/webhooks/razorpay` in docker-compose) — factor into Docker compose service design.
 
 **Tenancy (frozen)**: single-tenant — one platform-level Razorpay account (one `RAZORPAY_KEY_ID`/`SECRET` pair per environment: test/prod), matching how real aggregator platforms typically work (aggregator holds the single gateway link; organizer payout is routed internally, not via per-organizer gateway accounts). Organizer settlement/payout (internal ledger/balance tracking) is **deferred** — out of scope for the core build.
 
@@ -109,13 +109,14 @@ Payment's status fields (`gateway_status`, `status`) and `order_id` are defined 
 **Payment (system-facing, not JWT)**
 - `POST /webhooks/razorpay` — real webhook receiver, signature-verified (see Webhook Signature Scheme below)
 - `POST /mock/razorpay/simulate-webhook` — mock trigger, `x-api-key` protected
+- `POST /mock/razorpay/orders` — mocked Razorpay Orders API, HTTP Basic Auth (`RAZORPAY_KEY_ID`/`KEY_SECRET`)
 
 ## Webhook Signature Scheme (frozen)
 Mirrors real Razorpay: HMAC-SHA256 over the raw request body, shared secret from env var `RAZORPAY_WEBHOOK_SECRET`, signature sent/verified via the `X-Razorpay-Signature` header.
 
 ## Docker Compose Services (frozen)
 
-- **`web`** — Flask app (Gunicorn), exposes the API. Needs network reachability from `worker` (for the mock trigger's self-call to `/webhooks/razorpay`).
+- **`app`** — Flask app (Gunicorn), exposes the API. Needs network reachability from `worker` (for the mock trigger's self-call to `/webhooks/razorpay`).
 - **`worker`** — Celery worker, runs all background tasks (booking confirmation, event update notification, payment flow steps).
 - **`flower`** — Celery monitoring dashboard (dev/ops visibility only, per Job Tracking above).
 - **`db`** — PostgreSQL.

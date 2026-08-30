@@ -7,9 +7,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(
-        days=int(os.environ.get("JWT_EXPIRY_DAYS", 2))
-    )
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=int(os.environ.get("JWT_EXPIRY_DAYS", 2)))
 
     CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
     CELERY_RESULT_BACKEND = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -22,7 +20,10 @@ class Config:
     RAZORPAY_WEBHOOK_SECRET = os.environ["RAZORPAY_WEBHOOK_SECRET"]
 
     MOCK_TRIGGER_API_KEY = os.environ["MOCK_TRIGGER_API_KEY"]
-    WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "http://web:5000")
+    WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "http://app:5000")
+    RAZORPAY_MOCK_BASE_URL = os.environ.get(
+        "RAZORPAY_MOCK_BASE_URL", "http://mock-razorpay:5000"
+    )
 
     PAYMENT_GATEWAY_DELAY_SECONDS = int(
         os.environ.get("PAYMENT_GATEWAY_DELAY_SECONDS", 5)

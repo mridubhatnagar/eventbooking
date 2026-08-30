@@ -1,9 +1,8 @@
-import uuid
-
 from app.extensions import db
 from app.bookings.repository import BookingRepository
 from app.events.repository import EventRepository
 from app.payments.repository import PaymentRepository
+from app.payments.gateway_client import create_order
 from app.payments.tasks import request_payment
 from app.enums import GatewayStatus, PaymentStatus
 from app.exceptions import TaskEnqueueError
@@ -35,7 +34,8 @@ class BookingService:
         # All three writes (capacity reservation, Booking, Payment) share one
         # transaction — commit=False + a single commit at the end means a
         # failure partway through rolls everything back, including the
-        # capacity reservation.
+        # capacity reservation. This also covers create_order()'s gateway
+        # call: if it raises GatewayError, nothing here gets committed.
         try:
             if not self.event_repository.try_reserve_capacity(
                 event_id, quantity, commit=False
@@ -46,11 +46,14 @@ class BookingService:
                 commit=False, user_id=user_id, event_id=event_id, quantity=quantity
             )
 
+            amount = event.price * quantity
+            order_id = create_order(amount)
+
             payment = self.payment_repository.create(
                 commit=False,
                 booking_id=booking.id,
-                amount=event.price * quantity,
-                order_id=uuid.uuid4().hex,
+                amount=amount,
+                order_id=order_id,
                 gateway_status=GatewayStatus.CREATED,
                 status=PaymentStatus.PENDING,
             )

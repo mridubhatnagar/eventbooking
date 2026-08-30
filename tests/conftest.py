@@ -38,12 +38,29 @@ def fake_payment_repo():
 @pytest.fixture
 def app():
     from app import create_app
+    from app.extensions import db
 
     application = create_app()
     application.config["TESTING"] = True
+    with application.app_context():
+        db.create_all()
     return application
 
 
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture
+def mock_app():
+    from mock_razorpay_app import create_mock_app
+
+    application = create_mock_app()
+    application.config["TESTING"] = True
+    return application
+
+
+@pytest.fixture
+def mock_client(mock_app):
+    return mock_app.test_client()

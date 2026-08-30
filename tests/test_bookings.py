@@ -39,6 +39,9 @@ class TestCreateBooking:
         self, app, booking_service, fake_event_repo, monkeypatch, capacity, quantity
     ):
         monkeypatch.setattr(request_payment, "delay", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            "app.bookings.service.create_order", lambda amount: "order_test123"
+        )
         event = _seed_event(fake_event_repo, capacity)
 
         with app.app_context():
@@ -96,6 +99,9 @@ class TestCreateBooking:
             "delay",
             lambda *a, **kw: (_ for _ in ()).throw(ConnectionError("broker down")),
         )
+        monkeypatch.setattr(
+            "app.bookings.service.create_order", lambda amount: "order_test123"
+        )
         event = _seed_event(fake_event_repo, capacity=10)
 
         with app.app_context(), pytest.raises(TaskEnqueueError):
@@ -105,11 +111,17 @@ class TestCreateBooking:
 class TestCreateBookingTransactionRollback:
     """Integration test against a real DB — fakes can't prove real rollback."""
 
-    def test_capacity_reservation_rolls_back_on_downstream_failure(self, app):
+    def test_capacity_reservation_rolls_back_on_downstream_failure(
+        self, app, monkeypatch
+    ):
         from app.extensions import db
         from app.events.repository import EventRepository
         from app.bookings.repository import BookingRepository
         from app.payments.repository import PaymentRepository
+
+        monkeypatch.setattr(
+            "app.bookings.service.create_order", lambda amount: "order_test123"
+        )
 
         with app.app_context():
             event_repo = EventRepository()

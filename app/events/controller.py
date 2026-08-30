@@ -1,11 +1,12 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.decorators import role_required
 from app.events.service import EventService
 from app.events.schemas import CreateEventRequest, UpdateEventRequest, ListEventsQuery
 from app.enums import Role
-from app.docs import api
+from app.docs import api, JWT_SECURITY
+from app.responses import success, error
 
 bp = Blueprint("events", __name__, url_prefix="/events")
 event_service = EventService()
@@ -28,7 +29,7 @@ def _serialize(event):
 
 @bp.post("")
 @role_required(Role.ORGANIZER)
-@api.validate(json=CreateEventRequest, tags=["events"])
+@api.validate(json=CreateEventRequest, tags=["events"], security=JWT_SECURITY)
 def create_event():
     data = request.context.json
 
@@ -36,32 +37,32 @@ def create_event():
     event = event_service.create_event(
         user_id, data.name, data.date, data.venue, data.city, data.capacity, data.price
     )
-    return jsonify(_serialize(event)), 201
+    return success(_serialize(event), 201)
 
 
 @bp.get("")
 @jwt_required()
-@api.validate(query=ListEventsQuery, tags=["events"])
+@api.validate(query=ListEventsQuery, tags=["events"], security=JWT_SECURITY)
 def list_events():
     city = request.context.query.city
     events = event_service.list_events(city=city)
-    return jsonify([_serialize(e) for e in events]), 200
+    return success([_serialize(e) for e in events], 200)
 
 
 @bp.get("/<int:event_id>")
 @jwt_required()
-@api.validate(tags=["events"])
+@api.validate(tags=["events"], security=JWT_SECURITY)
 def get_event(event_id):
     try:
         event = event_service.get_event(event_id)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    return jsonify(_serialize(event)), 200
+        return error(str(e), 404)
+    return success(_serialize(event), 200)
 
 
 @bp.patch("/<int:event_id>")
 @role_required(Role.ORGANIZER)
-@api.validate(json=UpdateEventRequest, tags=["events"])
+@api.validate(json=UpdateEventRequest, tags=["events"], security=JWT_SECURITY)
 def update_event(event_id):
     data = request.context.json
 
@@ -71,8 +72,8 @@ def update_event(event_id):
     try:
         event = event_service.update_event(event_id, user_id, **fields)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 404
+        return error(str(e), 404)
     except PermissionError as e:
-        return jsonify({"error": str(e)}), 403
+        return error(str(e), 403)
 
-    return jsonify(_serialize(event)), 200
+    return success(_serialize(event), 200)

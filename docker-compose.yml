@@ -20,9 +20,15 @@ services:
     ports:
       - "6379:6379"
 
-  web:
+  mock-razorpay:
     build: .
-    command: gunicorn -b 0.0.0.0:5000 run:app
+    command: gunicorn -b 0.0.0.0:5000 mock_razorpay_app:app
+    env_file:
+      - .env.local
+
+  app:
+    build: .
+    command: sh -c "flask --app run db upgrade && gunicorn -b 0.0.0.0:5000 run:app"
     env_file:
       - .env.local
     ports:
@@ -31,6 +37,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_started
+      mock-razorpay:
         condition: service_started
 
   worker:
@@ -43,6 +51,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      mock-razorpay:
+        condition: service_started
 
   flower:
     build: .
@@ -54,6 +64,12 @@ services:
     depends_on:
       redis:
         condition: service_started
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    profiles: ["test"]
 
 volumes:
   db_data:

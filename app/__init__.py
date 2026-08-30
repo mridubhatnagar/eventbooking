@@ -1,12 +1,14 @@
-from flask import Flask, jsonify
+from flask import Flask
 
 from app.config import Config
-from app.extensions import db, jwt, configure_celery
-from app.exceptions import TaskEnqueueError
+from app.extensions import db, jwt, migrate, configure_celery
+from app.exceptions import TaskEnqueueError, GatewayError
 from app.docs import api
+from app.responses import error
 
 # Import every domain's model so SQLAlchemy's metadata knows about all
-# tables before db.create_all() runs.
+# tables — Alembic's autogenerate needs every model imported before it
+# diffs the metadata against the DB.
 from app.users.model import User  # noqa: F401
 from app.events.model import Event  # noqa: F401
 from app.bookings.model import Booking  # noqa: F401
@@ -20,6 +22,7 @@ def create_app():
 
     db.init_app(app)
     jwt.init_app(app)
+    migrate.init_app(app, db)
     configure_celery(app)
 
     from app.users.controller import bp as users_bp
@@ -36,9 +39,22 @@ def create_app():
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):
-        return jsonify({"error": "service_unavailable", "message": str(e)}), 503
+        return error(str(e), 503)
 
-    with app.app_context():
-        db.create_all()
+    @app.errorhandler(GatewayError)
+    def handle_gateway_error(e):
+        return error(str(e), 502)
+
+    @jwt.unauthorized_loader
+    def handle_missing_token(reason):
+        return error(reason, 401)
+
+    @jwt.invalid_token_loader
+    def handle_invalid_token(reason):
+        return error(reason, 422)
+
+    @jwt.expired_token_loader
+    def handle_expired_token(jwt_header, jwt_payload):
+        return error("token has expired", 401)
 
     return app

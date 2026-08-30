@@ -3,15 +3,17 @@ from flask import current_app
 
 from app.extensions import celery
 from app.payments.repository import PaymentRepository
+from app.payments.gateway_client import capture_payment
 from app.jobs.repository import JobRepository
 from app.enums import GatewayStatus, JobStatus, PaymentStatus, WebhookEvent
 
 
 @celery.task(bind=True, name="payments.request_payment")
 def request_payment(self, payment_id):
-    """Payment Flow step 2 (frozen in PLAN.md): sets status=REQUESTED,
-    gateway_status=captured. Schedules the delayed gateway callback trigger
-    to simulate processing latency."""
+    """Payment Flow step 2 (frozen in PLAN.md): calls Razorpay's Payment
+    Capture API (mocked) to simulate the request reaching the gateway, then
+    sets status=REQUESTED, gateway_status=captured. Schedules the delayed
+    gateway callback trigger to simulate processing latency."""
     job_repository = JobRepository()
     job = job_repository.create(
         task_id=self.request.id,
@@ -20,7 +22,16 @@ def request_payment(self, payment_id):
         payment_id=payment_id,
     )
 
-    payment = PaymentRepository().update(
+    payment_repository = PaymentRepository()
+    payment = payment_repository.get_by_id(payment_id)
+
+    try:
+        capture_payment(payment.order_id)
+    except Exception:
+        job_repository.update(job.id, status=JobStatus.FAILED)
+        raise
+
+    payment = payment_repository.update(
         payment_id,
         status=PaymentStatus.REQUESTED,
         gateway_status=GatewayStatus.CAPTURED,
@@ -45,7 +56,7 @@ def trigger_gateway_callback(self, order_id, event_type):
     )
 
     response = requests.post(
-        f"{current_app.config['WEB_BASE_URL']}/mock/razorpay/simulate-webhook",
+        f"{current_app.config['RAZORPAY_MOCK_BASE_URL']}/mock/razorpay/simulate-webhook",
         json={"order_id": order_id, "event": event_type},
         headers={"x-api-key": current_app.config["MOCK_TRIGGER_API_KEY"]},
         timeout=10,
