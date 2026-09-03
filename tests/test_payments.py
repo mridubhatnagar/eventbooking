@@ -1,4 +1,5 @@
 import base64
+import json
 
 import pytest
 import requests
@@ -349,3 +350,157 @@ class TestRequestPaymentTask:
             unchanged = PaymentRepository().get_by_id(payment.id)
             assert unchanged.status == PaymentStatus.PENDING
             assert unchanged.gateway_status == GatewayStatus.CREATED
+
+
+class TestWebhookEndpoint:
+    """HTTP-layer for the real receiver: signature verification and status
+    mapping, exercised as one actual request through /webhooks/razorpay."""
+
+    def _seed_payment(self, app, order_id):
+        """Returns (id, order_id) as plain values, not the ORM instance —
+        the instance is expired-and-detached once app_context tears down,
+        since Flask-SQLAlchemy expires objects on commit."""
+        from app.payments.repository import PaymentRepository
+
+        with app.app_context():
+            payment = PaymentRepository().create(
+                booking_id=1,
+                amount=100,
+                order_id=order_id,
+                gateway_status=GatewayStatus.CREATED,
+                status=PaymentStatus.PENDING,
+            )
+            return payment.id, payment.order_id
+
+    def _body(self, order_id, event=WebhookEvent.PAYMENT_CAPTURED):
+        return json.dumps({"order_id": order_id, "event": event.value}).encode()
+
+    def _post(self, client, body, signature=None):
+        headers = {"Content-Type": "application/json"}
+        if signature is not None:
+            headers["X-Razorpay-Signature"] = signature
+        return client.post("/webhooks/razorpay", data=body, headers=headers)
+
+    def test_valid_signature_updates_payment(self, app, client, monkeypatch):
+        from app.payments.repository import PaymentRepository
+
+        monkeypatch.setattr(send_booking_confirmation, "delay", lambda *a, **kw: None)
+        payment_id, order_id = self._seed_payment(app, "order-http-1")
+        body = self._body(order_id)
+        signature = compute_signature(body, app.config["RAZORPAY_WEBHOOK_SECRET"])
+
+        response = self._post(client, body, signature)
+
+        assert response.status_code == 200
+        with app.app_context():
+            updated = PaymentRepository().get_by_id(payment_id)
+            assert updated.status == PaymentStatus.PROCESSED
+            assert updated.gateway_status == GatewayStatus.CAPTURED
+
+    def test_invalid_signature_returns_401(self, app, client):
+        _, order_id = self._seed_payment(app, "order-http-2")
+        body = self._body(order_id)
+
+        response = self._post(client, body, "not-a-real-signature")
+
+        assert response.status_code == 401
+
+    def test_missing_signature_header_returns_401(self, app, client):
+        _, order_id = self._seed_payment(app, "order-http-3")
+        body = self._body(order_id)
+
+        response = self._post(client, body, signature=None)
+
+        assert response.status_code == 401
+
+    def test_unknown_order_id_returns_400(self, app, client):
+        body = self._body("nonexistent-order")
+        signature = compute_signature(body, app.config["RAZORPAY_WEBHOOK_SECRET"])
+
+        response = self._post(client, body, signature)
+
+        assert response.status_code == 400
+
+    def test_task_enqueue_failure_returns_503(self, app, client, monkeypatch):
+        monkeypatch.setattr(
+            send_booking_confirmation,
+            "delay",
+            lambda *a, **kw: (_ for _ in ()).throw(ConnectionError("broker down")),
+        )
+        _, order_id = self._seed_payment(app, "order-http-4")
+        body = self._body(order_id)
+        signature = compute_signature(body, app.config["RAZORPAY_WEBHOOK_SECRET"])
+
+        response = self._post(client, body, signature)
+
+        assert response.status_code == 503
+
+
+class TestSimulateWebhookEndpoint:
+    """Mock trigger endpoint: x-api-key auth, request validation, and that it
+    builds+forwards a correctly signed webhook to the real app's receiver."""
+
+    def _headers(self, mock_app, api_key=None):
+        return {
+            "x-api-key": (
+                mock_app.config["MOCK_TRIGGER_API_KEY"] if api_key is None else api_key
+            )
+        }
+
+    def test_missing_api_key_returns_403(self, mock_app, mock_client):
+        response = mock_client.post(
+            "/mock/razorpay/simulate-webhook",
+            json={"order_id": "order-1", "event": WebhookEvent.PAYMENT_CAPTURED},
+        )
+
+        assert response.status_code == 403
+
+    def test_wrong_api_key_returns_403(self, mock_app, mock_client):
+        response = mock_client.post(
+            "/mock/razorpay/simulate-webhook",
+            json={"order_id": "order-1", "event": WebhookEvent.PAYMENT_CAPTURED},
+            headers=self._headers(mock_app, api_key="wrong-key"),
+        )
+
+        assert response.status_code == 403
+
+    def test_invalid_event_type_returns_400(self, mock_app, mock_client):
+        response = mock_client.post(
+            "/mock/razorpay/simulate-webhook",
+            json={"order_id": "order-1", "event": "payment.refunded"},
+            headers=self._headers(mock_app),
+        )
+
+        assert response.status_code == 400
+
+    def test_valid_key_forwards_correctly_signed_webhook(
+        self, mock_app, mock_client, monkeypatch
+    ):
+        captured = {}
+
+        class FakeResponse:
+            status_code = 200
+            ok = True
+
+        def _fake_post(url, data=None, headers=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["headers"] = headers
+            return FakeResponse()
+
+        monkeypatch.setattr(requests, "post", _fake_post)
+
+        response = mock_client.post(
+            "/mock/razorpay/simulate-webhook",
+            json={"order_id": "order-1", "event": WebhookEvent.PAYMENT_CAPTURED},
+            headers=self._headers(mock_app),
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()["webhook_status"] == 200
+        assert captured["url"] == f"{mock_app.config['WEB_BASE_URL']}/webhooks/razorpay"
+        expected_signature = compute_signature(
+            captured["data"], mock_app.config["RAZORPAY_WEBHOOK_SECRET"]
+        )
+        assert captured["headers"]["X-Razorpay-Signature"] == expected_signature
+        assert b'"order_id":"order-1"' in captured["data"]
