@@ -28,7 +28,7 @@ services:
 
   app:
     build: .
-    command: sh -c "flask --app run db upgrade && gunicorn -b 0.0.0.0:5000 run:app"
+    command: gunicorn -b 0.0.0.0:5000 run:app
     env_file:
       - .env.local
     ports:
