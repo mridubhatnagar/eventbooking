@@ -330,6 +330,31 @@ class TestListBookingsEndpoint:
         assert len(bookings) == 1
         assert bookings[0]["quantity"] == 1
 
+    def test_pagination_limit_and_offset(self, client, register_and_login, monkeypatch):
+        order_ids = iter(f"order_test{i}" for i in range(10))
+        monkeypatch.setattr(
+            "app.bookings.service.create_order", lambda amount: next(order_ids)
+        )
+        monkeypatch.setattr(request_payment, "delay", lambda *a, **kw: None)
+
+        _, organizer_headers = register_and_login(Role.ORGANIZER)
+        event = _create_event_http(client, organizer_headers, capacity=10)
+
+        _, headers = register_and_login(Role.CUSTOMER)
+        for _ in range(3):
+            client.post(
+                "/bookings",
+                json={"event_id": event["id"], "quantity": 1},
+                headers=headers,
+            )
+
+        response = client.get("/bookings?limit=2&offset=1", headers=headers)
+        body = response.get_json()
+
+        assert response.status_code == 200
+        assert len(body["data"]) == 2
+        assert body["meta"] == {"total": 3, "limit": 2, "offset": 1}
+
 
 class TestSendBookingConfirmationTask:
     """Direct execution of the Celery task body (Background Task 1 in

@@ -76,8 +76,10 @@ class BookingService:
 
         return booking, payment
 
-    def list_bookings(self, user_id):
-        return self.booking_repository.list(user_id=user_id)
+    def list_bookings(self, user_id, limit=20, offset=0):
+        return self.booking_repository.list_paginated(
+            limit=limit, offset=offset, user_id=user_id
+        )
 
     def get_booking(self, booking_id, user_id):
         booking = self.booking_repository.get_by_id(booking_id)
