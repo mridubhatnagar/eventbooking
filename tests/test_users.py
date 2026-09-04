@@ -118,6 +118,19 @@ class TestRegisterEndpoint:
 
         assert response.status_code == 400
 
+    @pytest.mark.parametrize("short_password", ["", "a", "1234567"])
+    def test_register_short_password_returns_400(self, client, short_password):
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": "short-pw@test.com",
+                "password": short_password,
+                "role": Role.CUSTOMER,
+            },
+        )
+
+        assert response.status_code == 400
+
     def test_register_missing_required_field_returns_400(self, client):
         response = client.post(
             "/auth/register", json={"email": "no-password@test.com", "role": "customer"}

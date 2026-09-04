@@ -7,7 +7,7 @@ from app.organizer_profiles.schemas import OrganizerProfileFields
 class RegisterRequest(BaseModel):
     email: EmailStr
     phone: str | None = None
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=8)
     role: Role
     # Required when role == organizer (see validator below); rejected for customers.
     organizer_profile: OrganizerProfileFields | None = None
