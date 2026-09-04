@@ -37,13 +37,20 @@ class EventRepository(IDAO):
             query = query.filter(Event.user_id.in_(user_ids))
         return query.all()
 
-    def delete(self, id):
-        event = self.get_by_id(id)
-        if not event:
-            return None
-        db.session.delete(event)
+    def delete_if_no_bookings(self, id):
+        """Atomically deletes only if tickets_sold == 0 — collapses the
+        check-and-delete into one statement so a booking created between
+        checking and deleting can't be missed (TOCTOU), mirroring
+        try_reserve_capacity's atomic conditional UPDATE below.
+
+        Returns True if deleted, False if the row now has bookings (or is
+        already gone).
+        """
+        result = db.session.execute(
+            db.delete(Event).where(Event.id == id, Event.tickets_sold == 0)
+        )
         db.session.commit()
-        return event
+        return result.rowcount > 0
 
     def try_reserve_capacity(self, event_id, quantity, commit=True):
         """Atomically increments tickets_sold if capacity allows.

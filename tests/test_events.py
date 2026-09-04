@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.events.service import EventService
+from app.events.service import EventService, EventHasBookingsError
 from app.events.tasks import notify_event_update
 from app.enums import JobStatus, Role
 
@@ -512,6 +512,40 @@ class TestDeleteEventEndpoint:
         response = client.delete(f"/events/{created['id']}", headers=organizer_headers)
 
         assert response.status_code == 409
+
+    def test_concurrent_booking_between_check_and_delete_is_not_deleted(
+        self, app, client, register_and_login
+    ):
+        """TOCTOU regression test: simulates a booking landing in the gap
+        between the ownership check and the delete — proves the atomic
+        conditional DELETE catches live DB state, not the stale event
+        object read earlier, so the event survives instead of being
+        deleted out from under a fresh booking."""
+        from app.events.repository import EventRepository
+        from app.events.service import EventService
+
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+
+        with app.app_context():
+            event_repo = EventRepository()
+            service = EventService(event_repository=event_repo)
+            original_get_event = service.get_event
+
+            def get_event_then_simulate_concurrent_booking(event_id):
+                event = original_get_event(event_id)
+                # A booking commits here, in the gap after the check.
+                event_repo.update(event_id, tickets_sold=1)
+                return event
+
+            service.get_event = get_event_then_simulate_concurrent_booking
+
+            with pytest.raises(EventHasBookingsError):
+                service.delete_event(created["id"], created["user_id"])
+
+            assert event_repo.get_by_id(created["id"]) is not None
 
 
 class TestNotifyEventUpdateTask:

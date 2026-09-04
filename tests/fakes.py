@@ -52,9 +52,6 @@ class _FakeRepositoryBase:
             if all(getattr(obj, k) == v for k, v in filters.items())
         ]
 
-    def delete(self, id):
-        return self._store.pop(id, None)
-
 
 class FakeUserRepository(_FakeRepositoryBase):
     model_cls = User
@@ -65,6 +62,13 @@ class FakeUserRepository(_FakeRepositoryBase):
 
 class FakeEventRepository(_FakeRepositoryBase):
     model_cls = Event
+
+    def delete_if_no_bookings(self, id):
+        event = self._store.get(id)
+        if not event or event.tickets_sold != 0:
+            return False
+        del self._store[id]
+        return True
 
     def list_filtered(self, city=None, date_from=None, date_to=None, user_ids=None):
         events = self._store.values()

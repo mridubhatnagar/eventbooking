@@ -72,7 +72,8 @@ class EventService:
         event = self.get_event(event_id)
         if event.user_id != requester_id:
             raise PermissionError("not the organizer of this event")
-        if event.tickets_sold > 0:
-            raise EventHasBookingsError("cannot delete an event with existing bookings")
 
-        self.event_repository.delete(event_id)
+        # Atomic conditional delete (not a separate tickets_sold check then a
+        # delete) — see EventRepository.delete_if_no_bookings for why.
+        if not self.event_repository.delete_if_no_bookings(event_id):
+            raise EventHasBookingsError("cannot delete an event with existing bookings")
