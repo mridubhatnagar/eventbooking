@@ -290,6 +290,20 @@ class TestCreateEventEndpoint:
 
         assert response.status_code == 400
 
+    @pytest.mark.parametrize("bad_meridiem", ["am", "Am", "NOON", "XX", ""])
+    def test_invalid_meridiem_returns_400(
+        self, client, register_and_login, bad_meridiem
+    ):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.post(
+            "/events",
+            json=_valid_event_payload(meridiem=bad_meridiem),
+            headers=headers,
+        )
+
+        assert response.status_code == 400
+
 
 class TestGetEventEndpoint:
     def test_get_nonexistent_event_returns_404(self, client, register_and_login):
