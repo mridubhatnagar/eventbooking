@@ -10,10 +10,13 @@ class UserRepository(IDAO):
     def get_by_email(self, email):
         return User.query.filter_by(email=email).first()
 
-    def create(self, **kwargs):
+    def create(self, commit=True, **kwargs):
         user = User(**kwargs)
         db.session.add(user)
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
         return user
 
     def update(self, id, **kwargs):

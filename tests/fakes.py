@@ -8,6 +8,8 @@ from app.users.model import User
 from app.events.model import Event
 from app.bookings.model import Booking
 from app.payments.model import Payment
+from app.organizer_profiles.model import OrganizerProfile
+from app.reviews.model import Review
 
 
 class _FakeRepositoryBase:
@@ -84,4 +86,20 @@ class FakePaymentRepository(_FakeRepositoryBase):
     def get_by_booking_id(self, booking_id):
         return next(
             (p for p in self._store.values() if p.booking_id == booking_id), None
+        )
+
+
+class FakeOrganizerProfileRepository(_FakeRepositoryBase):
+    model_cls = OrganizerProfile
+
+    def get_by_user_id(self, user_id):
+        return next((p for p in self._store.values() if p.user_id == user_id), None)
+
+
+class FakeReviewRepository(_FakeRepositoryBase):
+    model_cls = Review
+
+    def get_by_booking_id(self, booking_id):
+        return next(
+            (r for r in self._store.values() if r.booking_id == booking_id), None
         )

@@ -14,6 +14,8 @@ from app.events.model import Event  # noqa: F401
 from app.bookings.model import Booking  # noqa: F401
 from app.payments.model import Payment  # noqa: F401
 from app.jobs.model import Job  # noqa: F401
+from app.organizer_profiles.model import OrganizerProfile  # noqa: F401
+from app.reviews.model import Review  # noqa: F401
 
 
 def create_app():
@@ -29,11 +31,15 @@ def create_app():
     from app.events.controller import bp as events_bp
     from app.bookings.controller import bp as bookings_bp
     from app.payments.controller import bp as payments_bp
+    from app.organizer_profiles.controller import bp as organizer_profiles_bp
+    from app.reviews.controller import bp as reviews_bp
 
     app.register_blueprint(users_bp)
     app.register_blueprint(events_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(payments_bp)
+    app.register_blueprint(organizer_profiles_bp)
+    app.register_blueprint(reviews_bp)
 
     api.register(app)
 

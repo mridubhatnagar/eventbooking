@@ -4,15 +4,26 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.decorators import role_required
 from app.events.service import EventService
 from app.events.schemas import CreateEventRequest, UpdateEventRequest, ListEventsQuery
+from app.organizer_profiles.service import OrganizerProfileService
 from app.enums import Role
 from app.docs import api, JWT_SECURITY
 from app.responses import success, error
 
 bp = Blueprint("events", __name__, url_prefix="/events")
 event_service = EventService()
+organizer_profile_service = OrganizerProfileService()
+
+
+def _serialize_organizer(profile):
+    return {
+        "company_name": profile.company_name,
+        "city": profile.city,
+        "industry": profile.industry,
+    }
 
 
 def _serialize(event):
+    organizer_profile = organizer_profile_service.get_by_user_id(event.user_id)
     return {
         "id": event.id,
         "user_id": event.user_id,
@@ -24,6 +35,9 @@ def _serialize(event):
         "tickets_sold": event.tickets_sold,
         "capacity_remaining": event.capacity_remaining,
         "price": str(event.price),
+        "organizer": (
+            _serialize_organizer(organizer_profile) if organizer_profile else None
+        ),
     }
 
 

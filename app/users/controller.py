@@ -14,8 +14,14 @@ auth_service = AuthService()
 def register():
     data = request.context.json
 
+    organizer_profile = (
+        data.organizer_profile.model_dump() if data.organizer_profile else None
+    )
+
     try:
-        user = auth_service.register(data.email, data.phone, data.password, data.role)
+        user = auth_service.register(
+            data.email, data.phone, data.password, data.role, organizer_profile
+        )
     except ValueError as e:
         return error(str(e), 400)
 

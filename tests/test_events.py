@@ -5,6 +5,7 @@ import pytest
 
 from app.events.service import EventService
 from app.events.tasks import notify_event_update
+from app.enums import JobStatus, Role
 
 
 @pytest.fixture
@@ -102,3 +103,214 @@ class TestUpdateEvent:
             event_service.update_event(event.id, ORGANIZER_ID, venue="Hall B")
 
         assert calls == [event.id]
+
+
+def _valid_event_payload(**overrides):
+    payload = {
+        "name": "Concert",
+        "date": "2026-01-01T18:00:00",
+        "venue": "Hall A",
+        "city": "Bengaluru",
+        "capacity": 100,
+        "price": "10.00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestCreateEventEndpoint:
+    """HTTP-layer: JWT enforcement, RBAC, request validation."""
+
+    def test_missing_jwt_returns_401(self, client):
+        response = client.post("/events", json=_valid_event_payload())
+
+        assert response.status_code == 401
+
+    def test_invalid_jwt_returns_422(self, client):
+        response = client.post(
+            "/events",
+            json=_valid_event_payload(),
+            headers={"Authorization": "Bearer not-a-real-token"},
+        )
+
+        assert response.status_code == 422
+
+    def test_customer_role_forbidden(self, client, register_and_login):
+        _, headers = register_and_login(Role.CUSTOMER)
+
+        response = client.post("/events", json=_valid_event_payload(), headers=headers)
+
+        assert response.status_code == 403
+
+    def test_organizer_can_create_event(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.post("/events", json=_valid_event_payload(), headers=headers)
+
+        assert response.status_code == 201
+        assert response.get_json()["data"]["name"] == "Concert"
+
+    def test_missing_required_field_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        payload = _valid_event_payload()
+        del payload["name"]
+
+        response = client.post("/events", json=payload, headers=headers)
+
+        assert response.status_code == 400
+
+    def test_non_positive_capacity_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.post(
+            "/events", json=_valid_event_payload(capacity=0), headers=headers
+        )
+
+        assert response.status_code == 400
+
+
+class TestGetEventEndpoint:
+    def test_get_nonexistent_event_returns_404(self, client, register_and_login):
+        _, headers = register_and_login(Role.CUSTOMER)
+
+        response = client.get("/events/999999", headers=headers)
+
+        assert response.status_code == 404
+
+    def test_get_event_requires_jwt(self, client):
+        response = client.get("/events/1")
+
+        assert response.status_code == 401
+
+
+class TestUpdateEventEndpoint:
+    def test_customer_role_forbidden(self, client, register_and_login):
+        _, organizer_headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=organizer_headers
+        ).get_json()["data"]
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        response = client.patch(
+            f"/events/{created['id']}",
+            json={"venue": "Hall B"},
+            headers=customer_headers,
+        )
+
+        assert response.status_code == 403
+
+    def test_non_owner_organizer_returns_403(self, client, register_and_login):
+        _, owner_headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=owner_headers
+        ).get_json()["data"]
+
+        _, other_headers = register_and_login(Role.ORGANIZER)
+        response = client.patch(
+            f"/events/{created['id']}",
+            json={"venue": "Hall B"},
+            headers=other_headers,
+        )
+
+        assert response.status_code == 403
+
+    def test_owner_can_update_and_task_is_triggered(
+        self, client, register_and_login, monkeypatch
+    ):
+        calls = []
+        monkeypatch.setattr(
+            notify_event_update, "delay", lambda event_id: calls.append(event_id)
+        )
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+
+        response = client.patch(
+            f"/events/{created['id']}", json={"venue": "Hall B"}, headers=headers
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()["data"]["venue"] == "Hall B"
+        assert calls == [created["id"]]
+
+
+class TestNotifyEventUpdateTask:
+    """Direct execution of the Celery task body (Background Task 2 in
+    PLAN.md) — proves it notifies every booked customer, not just that it
+    was enqueued."""
+
+    def test_notifies_each_booked_customer_and_records_success_job(self, app, capsys):
+        from app.users.repository import UserRepository
+        from app.events.repository import EventRepository
+        from app.bookings.repository import BookingRepository
+        from app.jobs.repository import JobRepository
+
+        with app.app_context():
+            organizer = UserRepository().create(
+                email="organizer@test.com",
+                phone=None,
+                password_hash="x",
+                role=Role.ORGANIZER,
+            )
+            event = EventRepository().create(
+                user_id=organizer.id,
+                name="Concert",
+                date=datetime(2026, 1, 1, 18, 0),
+                venue="Hall A",
+                city="Bengaluru",
+                capacity=10,
+                tickets_sold=0,
+                price=Decimal("10.00"),
+            )
+            customer_a = UserRepository().create(
+                email="a@test.com", phone=None, password_hash="x", role=Role.CUSTOMER
+            )
+            customer_b = UserRepository().create(
+                email="b@test.com", phone=None, password_hash="x", role=Role.CUSTOMER
+            )
+            BookingRepository().create(
+                user_id=customer_a.id, event_id=event.id, quantity=1
+            )
+            BookingRepository().create(
+                user_id=customer_b.id, event_id=event.id, quantity=2
+            )
+
+            notify_event_update.apply(args=[event.id])
+
+            captured = capsys.readouterr()
+            assert customer_a.email in captured.out
+            assert customer_b.email in captured.out
+
+            jobs = JobRepository().list(event_id=event.id)
+            assert len(jobs) == 1
+            assert jobs[0].status == JobStatus.SUCCESS
+
+    def test_no_bookings_still_records_success_job(self, app, capsys):
+        from app.users.repository import UserRepository
+        from app.events.repository import EventRepository
+        from app.jobs.repository import JobRepository
+
+        with app.app_context():
+            organizer = UserRepository().create(
+                email="organizer2@test.com",
+                phone=None,
+                password_hash="x",
+                role=Role.ORGANIZER,
+            )
+            event = EventRepository().create(
+                user_id=organizer.id,
+                name="Empty",
+                date=datetime(2026, 1, 1, 18, 0),
+                venue="Hall A",
+                city="Bengaluru",
+                capacity=10,
+                tickets_sold=0,
+                price=Decimal("10.00"),
+            )
+
+            notify_event_update.apply(args=[event.id])
+
+            jobs = JobRepository().list(event_id=event.id)
+            assert len(jobs) == 1
+            assert jobs[0].status == JobStatus.SUCCESS

@@ -32,10 +32,12 @@ The mock Razorpay API (`app/payments/mock_controller.py`) runs as its own servic
 
 ```bash
 cp .env.example .env.local   # fill in real values
+docker compose up --build -d db redis mock-razorpay
+docker compose run --rm app flask --app run db upgrade   # explicit, manual — see below
 docker compose up --build
 ```
 
-This starts `app` (API, port 5000), `worker` (Celery), `mock-razorpay` (the mocked gateway, internal only — no host port), `flower` (Celery monitoring, port 5555), `db` (Postgres), and `redis`. `app` runs pending Alembic migrations (`flask db upgrade`) before starting the server, so the schema is always up to date.
+This starts `app` (API, port 5000), `worker` (Celery), `mock-razorpay` (the mocked gateway, internal only — no host port), `flower` (Celery monitoring, port 5555), `db` (Postgres), and `redis`.
 
 ### Database migrations
 
@@ -43,12 +45,14 @@ Everything runs through docker compose — there's no local Python environment f
 
 ```bash
 # after changing a model: generate a new migration (bind-mounts migrations/ so the
-# generated file lands on your host filesystem, not just inside the container)
+# generated file lands on your host filesystem, not just inside the container — this
+# mount is scoped to this one-off command, not a standing volume in docker-compose.yml)
 docker compose run --rm --volume "$(pwd)/migrations:/app/migrations" app flask --app run db migrate -m "description"
 
-# apply it (rebuilding picks up the new file and the app command runs `db upgrade`
-# automatically before starting gunicorn)
-docker compose up --build
+# apply it — a separate, manual, explicit step, deliberately NOT wired into the
+# app service's boot command: upgrading is tied to whether a new migration exists,
+# not to the app process's lifecycle, so it shouldn't fire on every container start
+docker compose run --rm app flask --app run db upgrade
 ```
 
 ## API Docs

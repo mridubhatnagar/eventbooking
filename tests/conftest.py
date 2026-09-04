@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import pytest
 
@@ -12,6 +13,8 @@ from tests.fakes import (
     FakeEventRepository,
     FakeBookingRepository,
     FakePaymentRepository,
+    FakeOrganizerProfileRepository,
+    FakeReviewRepository,
 )
 
 
@@ -36,6 +39,16 @@ def fake_payment_repo():
 
 
 @pytest.fixture
+def fake_organizer_profile_repo():
+    return FakeOrganizerProfileRepository()
+
+
+@pytest.fixture
+def fake_review_repo():
+    return FakeReviewRepository()
+
+
+@pytest.fixture
 def app():
     from app import create_app
     from app.extensions import db
@@ -50,6 +63,47 @@ def app():
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture
+def register_and_login(client):
+    """Registers + logs in a fresh user via the real HTTP endpoints and
+    returns (user_id, auth_headers) — for controller-level tests that need
+    a real JWT rather than a fake identity."""
+
+    def _do(role, password="pw123456"):
+        from app.enums import Role
+
+        email = f"user-{uuid.uuid4().hex[:8]}@test.com"
+        payload = {
+            "email": email,
+            "phone": "555-0000",
+            "password": password,
+            "role": role,
+        }
+        if role == Role.ORGANIZER:
+            payload["organizer_profile"] = {
+                "company_name": "Test Events Co",
+                "city": "Bengaluru",
+                "address": "123 Test Street, Bengaluru",
+                "industry": "MUSIC",
+                "pan_number": "ABCDE1234F",
+                "bank_account_holder_name": "Test Events Co",
+                "bank_account_number": "000123456789",
+                "bank_ifsc_code": "TEST0001234",
+                "bank_name": "Test Bank",
+            }
+        resp = client.post("/auth/register", json=payload)
+        assert resp.status_code == 201, resp.get_json()
+        user_id = resp.get_json()["data"]["id"]
+
+        resp = client.post("/auth/login", json={"email": email, "password": password})
+        assert resp.status_code == 200, resp.get_json()
+        token = resp.get_json()["data"]["access_token"]
+
+        return user_id, {"Authorization": f"Bearer {token}"}
+
+    return _do
 
 
 @pytest.fixture
