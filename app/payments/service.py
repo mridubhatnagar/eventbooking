@@ -21,6 +21,13 @@ class PaymentService:
         if event_type not in EVENT_TO_STATUS:
             raise ValueError(f"unknown event type: {event_type}")
 
+        # Idempotency: PROCESSED/FAILED are terminal. A retried/duplicate
+        # webhook delivery (or an out-of-order one arriving after the
+        # terminal state) must not re-run the transition or re-enqueue the
+        # booking confirmation task a second time.
+        if payment.status in (PaymentStatus.PROCESSED, PaymentStatus.FAILED):
+            return payment
+
         status, gateway_status = EVENT_TO_STATUS[event_type]
         payment = self.payment_repository.update(
             payment.id, status=status, gateway_status=gateway_status

@@ -71,6 +71,30 @@ class TestProcessWebhookEvent:
 
         assert calls == [(payment.booking_id, payment.id)]
 
+    def test_duplicate_captured_webhook_does_not_reenqueue_confirmation(
+        self, app, payment_service, fake_payment_repo, monkeypatch
+    ):
+        """A retried/duplicate webhook delivery for an already-PROCESSED
+        payment must be a no-op — not re-run the transition or re-enqueue
+        the booking confirmation task a second time."""
+        calls = []
+        monkeypatch.setattr(
+            send_booking_confirmation,
+            "delay",
+            lambda booking_id, payment_id=None: calls.append((booking_id, payment_id)),
+        )
+        payment = _seed_payment(fake_payment_repo)
+
+        with app.app_context():
+            payment_service.process_webhook_event(
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+            )
+            payment_service.process_webhook_event(
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+            )
+
+        assert calls == [(payment.booking_id, payment.id)]
+
     def test_failed_does_not_trigger_confirmation_task(
         self, app, payment_service, fake_payment_repo, monkeypatch
     ):
