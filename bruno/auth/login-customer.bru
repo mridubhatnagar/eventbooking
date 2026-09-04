@@ -1,0 +1,22 @@
+meta {
+  name: Login Customer
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "customer@demo.com",
+    "password": "pass1234"
+  }
+}
+
+vars:post-response {
+  customerToken: res.body.data.access_token
+}

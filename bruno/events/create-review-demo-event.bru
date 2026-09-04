@@ -1,0 +1,44 @@
+meta {
+  name: Create Review Demo Event
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/events
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{organizerToken}}
+}
+
+script:pre-request {
+  const offsetSeconds = Number(bru.getVar("reviewEventOffsetSeconds") || 45);
+  const date = new Date(Date.now() + offsetSeconds * 1000);
+  bru.setVar("eventTwoDate", date.toISOString().slice(0, 19));
+}
+
+body:json {
+  {
+    "name": "Review Demo Show",
+    "date": "{{eventTwoDate}}",
+    "venue": "Side Stage",
+    "city": "Bengaluru",
+    "capacity": 50,
+    "price": "15.00"
+  }
+}
+
+vars:post-response {
+  eventId2: res.body.data.id
+}
+
+docs {
+  Date is computed as now + `reviewEventOffsetSeconds` (default 45s, set in the
+  Local environment) so it's always valid at creation time (must be strictly
+  future). Book it right after creating it (Bookings > Book Review Demo Event),
+  then wait for that offset to elapse before Reviews > Review Review-Demo Event
+  — a review requires the event's date to have already passed.
+}

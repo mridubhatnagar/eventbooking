@@ -1,0 +1,21 @@
+meta {
+  name: Update Organizer Profile
+  type: http
+  seq: 1
+}
+
+patch {
+  url: {{baseUrl}}/organizers/me
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{organizerToken}}
+}
+
+body:json {
+  {
+    "company_name": "Demo Events Co, Ltd"
+  }
+}

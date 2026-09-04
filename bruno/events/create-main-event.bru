@@ -1,0 +1,30 @@
+meta {
+  name: Create Main Event
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/events
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{organizerToken}}
+}
+
+body:json {
+  {
+    "name": "Demo Concert",
+    "date": "2026-12-01T18:00:00",
+    "venue": "Main Hall",
+    "city": "Bengaluru",
+    "capacity": 50,
+    "price": "25.00"
+  }
+}
+
+vars:post-response {
+  eventId1: res.body.data.id
+}

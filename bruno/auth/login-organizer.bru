@@ -1,0 +1,22 @@
+meta {
+  name: Login Organizer
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "organizer@demo.com",
+    "password": "pass1234"
+  }
+}
+
+vars:post-response {
+  organizerToken: res.body.data.access_token
+}

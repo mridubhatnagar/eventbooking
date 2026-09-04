@@ -1,0 +1,27 @@
+meta {
+  name: Update Main Event
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/events/{{eventId1}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{organizerToken}}
+}
+
+body:json {
+  {
+    "venue": "Main Hall (Renovated)"
+  }
+}
+
+docs {
+  Triggers the Event Update Notification background task. Nothing to check
+  here — watch `docker compose logs -f worker` for the `[notification] ...`
+  line while recording.
+}

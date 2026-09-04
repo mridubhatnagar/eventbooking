@@ -1,0 +1,19 @@
+meta {
+  name: List Events
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/events
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}
+
+docs {
+  Each event's response includes an `organizer` object (`company_name`,
+  `city`, `industry`) — note that bank/GST/PAN/address never appear here.
+}
