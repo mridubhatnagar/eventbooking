@@ -7,8 +7,12 @@ class Booking(db.Model, TimestampMixin):
     __tablename__ = "bookings"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    event_id = db.Column(db.Integer, db.ForeignKey("events.id"), nullable=False)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
+    )
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("events.id"), nullable=False, index=True
+    )
     quantity = db.Column(db.Integer, nullable=False)
 
     # Cross-domain relationship resolved by class name string (no import needed,
