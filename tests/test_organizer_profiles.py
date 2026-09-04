@@ -1,7 +1,11 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.organizer_profiles.service import OrganizerProfileService
 from app.enums import Role
+
+FUTURE_DATE = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=365)
 
 ORGANIZER_PROFILE = {
     "company_name": "Test Events Co",
@@ -149,7 +153,7 @@ class TestEventOrganizerSerialization:
             "/events",
             json={
                 "name": "Concert",
-                "date": "2026-01-01T18:00:00",
+                "date": FUTURE_DATE.isoformat(),
                 "venue": "Hall A",
                 "city": "Bengaluru",
                 "capacity": 10,

@@ -25,6 +25,26 @@ class EventRepository(IDAO):
     def list(self, **filters):
         return Event.query.filter_by(**filters).all()
 
+    def list_filtered(self, city=None, date_from=None, date_to=None, user_ids=None):
+        query = Event.query
+        if city:
+            query = query.filter(Event.city == city)
+        if date_from:
+            query = query.filter(Event.date >= date_from)
+        if date_to:
+            query = query.filter(Event.date <= date_to)
+        if user_ids is not None:
+            query = query.filter(Event.user_id.in_(user_ids))
+        return query.all()
+
+    def delete(self, id):
+        event = self.get_by_id(id)
+        if not event:
+            return None
+        db.session.delete(event)
+        db.session.commit()
+        return event
+
     def try_reserve_capacity(self, event_id, quantity, commit=True):
         """Atomically increments tickets_sold if capacity allows.
 

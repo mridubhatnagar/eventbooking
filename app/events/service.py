@@ -1,11 +1,19 @@
 from app.events.repository import EventRepository
 from app.events.tasks import notify_event_update
+from app.organizer_profiles.repository import OrganizerProfileRepository
 from app.exceptions import TaskEnqueueError
 
 
+class EventHasBookingsError(Exception):
+    """Raised when deleting an event that already has bookings against it."""
+
+
 class EventService:
-    def __init__(self, event_repository=None):
+    def __init__(self, event_repository=None, organizer_profile_repository=None):
         self.event_repository = event_repository or EventRepository()
+        self.organizer_profile_repository = (
+            organizer_profile_repository or OrganizerProfileRepository()
+        )
 
     def create_event(self, user_id, name, date, venue, city, capacity, price):
         return self.event_repository.create(
@@ -19,9 +27,15 @@ class EventService:
             price=price,
         )
 
-    def list_events(self, city=None):
-        filters = {"city": city} if city else {}
-        return self.event_repository.list(**filters)
+    def list_events(self, city=None, date_from=None, date_to=None, industry=None):
+        user_ids = None
+        if industry:
+            profiles = self.organizer_profile_repository.list(industry=industry)
+            user_ids = [p.user_id for p in profiles]
+
+        return self.event_repository.list_filtered(
+            city=city, date_from=date_from, date_to=date_to, user_ids=user_ids
+        )
 
     def get_event(self, event_id):
         event = self.event_repository.get_by_id(event_id)
@@ -45,3 +59,12 @@ class EventService:
             ) from e
 
         return updated_event
+
+    def delete_event(self, event_id, requester_id):
+        event = self.get_event(event_id)
+        if event.user_id != requester_id:
+            raise PermissionError("not the organizer of this event")
+        if event.tickets_sold > 0:
+            raise EventHasBookingsError("cannot delete an event with existing bookings")
+
+        self.event_repository.delete(event_id)

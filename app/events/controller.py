@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.decorators import role_required
-from app.events.service import EventService
+from app.events.service import EventService, EventHasBookingsError
 from app.events.schemas import CreateEventRequest, UpdateEventRequest, ListEventsQuery
 from app.organizer_profiles.service import OrganizerProfileService
 from app.enums import Role
@@ -58,8 +58,13 @@ def create_event():
 @jwt_required()
 @api.validate(query=ListEventsQuery, tags=["events"], security=JWT_SECURITY)
 def list_events():
-    city = request.context.query.city
-    events = event_service.list_events(city=city)
+    query = request.context.query
+    events = event_service.list_events(
+        city=query.city,
+        date_from=query.date_from,
+        date_to=query.date_to,
+        industry=query.industry,
+    )
     return success([_serialize(e) for e in events], 200)
 
 
@@ -91,3 +96,21 @@ def update_event(event_id):
         return error(str(e), 403)
 
     return success(_serialize(event), 200)
+
+
+@bp.delete("/<int:event_id>")
+@role_required(Role.ORGANIZER)
+@api.validate(tags=["events"], security=JWT_SECURITY)
+def delete_event(event_id):
+    user_id = int(get_jwt_identity())
+
+    try:
+        event_service.delete_event(event_id, user_id)
+    except ValueError as e:
+        return error(str(e), 404)
+    except PermissionError as e:
+        return error(str(e), 403)
+    except EventHasBookingsError as e:
+        return error(str(e), 409)
+
+    return success(None, 200)

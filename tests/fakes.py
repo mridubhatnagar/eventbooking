@@ -52,6 +52,9 @@ class _FakeRepositoryBase:
             if all(getattr(obj, k) == v for k, v in filters.items())
         ]
 
+    def delete(self, id):
+        return self._store.pop(id, None)
+
 
 class FakeUserRepository(_FakeRepositoryBase):
     model_cls = User
@@ -62,6 +65,18 @@ class FakeUserRepository(_FakeRepositoryBase):
 
 class FakeEventRepository(_FakeRepositoryBase):
     model_cls = Event
+
+    def list_filtered(self, city=None, date_from=None, date_to=None, user_ids=None):
+        events = self._store.values()
+        if city:
+            events = (e for e in events if e.city == city)
+        if date_from:
+            events = (e for e in events if e.date >= date_from)
+        if date_to:
+            events = (e for e in events if e.date <= date_to)
+        if user_ids is not None:
+            events = (e for e in events if e.user_id in user_ids)
+        return list(events)
 
     def try_reserve_capacity(self, event_id, quantity, commit=True):
         event = self._store.get(event_id)
