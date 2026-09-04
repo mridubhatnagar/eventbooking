@@ -4,20 +4,20 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator
 
 from app.enums import Industry
-from app.timezone import now_ist, to_naive_ist
+from app.timezone import now_ist
 
 
-def _normalize_date(value: datetime | None) -> datetime | None:
-    """Normalize any incoming datetime (aware or naive) to naive IST — so a
-    client-sent offset (e.g. "+05:30") can never be compared against a naive
-    `now` and crash, and stored/compared dates are consistently IST."""
-    if value is not None:
-        value = to_naive_ist(value)
+def _reject_timezone_offset(value: datetime | None) -> datetime | None:
+    """All dates are assumed IST (see app/timezone.py) — a date with an
+    explicit offset is rejected with a clean 400 rather than converted,
+    since the API only ever documents/sends naive dates."""
+    if value is not None and value.tzinfo is not None:
+        raise ValueError("date must not include a timezone offset — IST is assumed")
     return value
 
 
 def _reject_past_date(value: datetime | None) -> datetime | None:
-    value = _normalize_date(value)
+    value = _reject_timezone_offset(value)
     if value is not None and value <= now_ist():
         raise ValueError("date must be in the future")
     return value
@@ -51,5 +51,5 @@ class ListEventsQuery(BaseModel):
     date_to: datetime | None = None
     industry: Industry | None = None
 
-    _normalize_date_from = field_validator("date_from")(_normalize_date)
-    _normalize_date_to = field_validator("date_to")(_normalize_date)
+    _reject_date_from_offset = field_validator("date_from")(_reject_timezone_offset)
+    _reject_date_to_offset = field_validator("date_to")(_reject_timezone_offset)

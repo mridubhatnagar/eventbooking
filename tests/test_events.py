@@ -260,28 +260,15 @@ class TestCreateEventEndpoint:
 
         assert response.status_code == 400
 
-    def test_timezone_aware_future_date_is_accepted(self, client, register_and_login):
+    def test_timezone_aware_date_returns_400_not_500(self, client, register_and_login):
         """Regression test: a client-sent date with a UTC offset must not
-        crash the past-date check (naive vs aware datetime comparison)."""
+        crash (naive vs aware datetime comparison) — it's cleanly rejected,
+        since the API only ever documents/sends naive (IST-assumed) dates."""
         _, headers = register_and_login(Role.ORGANIZER)
-        future_date = (FUTURE_DATE).isoformat() + "+05:30"
+        future_date = FUTURE_DATE.isoformat() + "+05:30"
 
         response = client.post(
             "/events", json=_valid_event_payload(date=future_date), headers=headers
-        )
-
-        assert response.status_code == 201
-
-    def test_timezone_aware_past_date_returns_400_not_500(
-        self, client, register_and_login
-    ):
-        _, headers = register_and_login(Role.ORGANIZER)
-        past_date = (
-            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
-        ).isoformat() + "+05:30"
-
-        response = client.post(
-            "/events", json=_valid_event_payload(date=past_date), headers=headers
         )
 
         assert response.status_code == 400
