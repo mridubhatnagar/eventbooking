@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from app.extensions import db
 from app.bookings.repository import BookingRepository
 from app.events.repository import EventRepository
@@ -8,6 +6,7 @@ from app.payments.gateway_client import create_order
 from app.payments.tasks import request_payment
 from app.enums import GatewayStatus, PaymentStatus
 from app.exceptions import TaskEnqueueError
+from app.timezone import now_ist
 
 
 class BookingService:
@@ -26,8 +25,7 @@ class BookingService:
         if not event:
             raise ValueError("event not found")
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if event.date <= now:
+        if event.date <= now_ist():
             raise ValueError("cannot book a past event")
 
         if quantity < 1:

@@ -13,6 +13,8 @@
 11. `GET /events` supports filtering by `city` (exact match), `date_from`/`date_to` (inclusive range), and `industry` (matched via the event's organizer profile).
 12. Free-text search (e.g. searching by event name) is out of scope for now — filters only, no search box.
 17. Booking status is derived from `Payment.status`, never stored separately — `Payment` (`PENDING`/`REQUESTED` → `PROCESSED`|`FAILED`) is the single source of truth. `Booking.status` maps it: `PENDING` while payment is pending/requested, `CONFIRMED` once payment is `PROCESSED`, `FAILED` if payment is `FAILED`. The "Booking Confirmation" notification fires on **payment success** (`Payment.status == PROCESSED`), not at booking creation — a booking can sit at `PENDING` for a while (or end at `FAILED`) with no confirmation ever sent.
+18. All events are paid events — `Event.price` is required on every event (a `0` price is technically allowed but there's no dedicated free-event path); every booking, regardless of price, goes through the full payment flow (`create_order` → `Payment` row → webhook confirmation).
+19. All event dates are assumed **IST** (India-focused platform for now) — `app/timezone.py`'s `now_ist()`/`to_naive_ist()` are the single source of truth for "now" and for normalizing any incoming date. A client-sent date with a timezone offset is converted to naive IST at the schema boundary (`app/events/schemas.py`), not compared directly — this also fixed a real bug where a timezone-aware date crashed the past-date validator with an unhandled `TypeError`/500 instead of a clean `400`. Per-organizer/per-event timezone selection is deferred to v2.
 
 ## Deferred to v2
 
