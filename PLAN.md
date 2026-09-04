@@ -95,14 +95,14 @@ Payment's status fields (`gateway_status`, `status`) and `order_id` are defined 
 
 **Events**
 - `POST /events` — create event (organizer only)
-- `GET /events` — list events (browse, both roles), optional `?city=` filter (exact match)
+- `GET /events` — list events (browse, both roles), optional `?city=` filter (exact match); paginated via `?limit=` (default 20, max 100) / `?offset=` (default 0), `total`/`limit`/`offset` returned in the response's `meta`
 - `GET /events/:id` — event detail
 - `PATCH /events/:id` — update event (organizer only, own events) — triggers Event Update Notification task
 - *(delete/cancel event — not discussed, omitted for now)*
 
 **Bookings**
 - `POST /bookings` — book an event (customer only) — checks capacity, creates `Booking` + `Payment`, kicks off payment flow
-- `GET /bookings` — list own bookings (customer only)
+- `GET /bookings` — list own bookings (customer only); paginated the same way as `GET /events` (`?limit=`/`?offset=`, `meta.total`/`limit`/`offset`)
 - `GET /bookings/:id` — booking detail (customer only, own booking)
 - Cancellation: **out of scope** (confirmed)
 

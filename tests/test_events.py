@@ -60,9 +60,10 @@ class TestListEvents:
             price=Decimal("5.00"),
         )
 
-        events = event_service.list_events(city=filter_city)
+        events, total = event_service.list_events(city=filter_city)
 
         assert {e.name for e in events} == expected_names
+        assert total == len(expected_names)
 
 
 class TestGetEvent:
@@ -181,6 +182,47 @@ class TestGetEventEndpoint:
         response = client.get("/events/1")
 
         assert response.status_code == 401
+
+
+class TestListEventsPaginationEndpoint:
+    def test_default_limit_and_offset(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        for i in range(3):
+            client.post(
+                "/events",
+                json=_valid_event_payload(name=f"Event {i}"),
+                headers=headers,
+            )
+
+        response = client.get("/events", headers=headers)
+        body = response.get_json()
+
+        assert response.status_code == 200
+        assert len(body["data"]) == 3
+        assert body["meta"] == {"total": 3, "limit": 20, "offset": 0}
+
+    def test_limit_and_offset_paginate_results(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        for i in range(5):
+            client.post(
+                "/events",
+                json=_valid_event_payload(name=f"Event {i}"),
+                headers=headers,
+            )
+
+        response = client.get("/events?limit=2&offset=2", headers=headers)
+        body = response.get_json()
+
+        assert response.status_code == 200
+        assert len(body["data"]) == 2
+        assert body["meta"] == {"total": 5, "limit": 2, "offset": 2}
+
+    def test_limit_over_max_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.CUSTOMER)
+
+        response = client.get("/events?limit=101", headers=headers)
+
+        assert response.status_code == 400
 
 
 class TestUpdateEventEndpoint:

@@ -52,6 +52,10 @@ class _FakeRepositoryBase:
             if all(getattr(obj, k) == v for k, v in filters.items())
         ]
 
+    def list_paginated(self, limit, offset, **filters):
+        items = self.list(**filters)
+        return items[offset : offset + limit], len(items)
+
 
 class FakeUserRepository(_FakeRepositoryBase):
     model_cls = User
@@ -94,6 +98,9 @@ class FakeOrganizerProfileRepository(_FakeRepositoryBase):
 
     def get_by_user_id(self, user_id):
         return next((p for p in self._store.values() if p.user_id == user_id), None)
+
+    def list_by_user_ids(self, user_ids):
+        return [p for p in self._store.values() if p.user_id in user_ids]
 
 
 class FakeReviewRepository(_FakeRepositoryBase):

@@ -24,3 +24,5 @@ class UpdateEventRequest(BaseModel):
 
 class ListEventsQuery(BaseModel):
     city: str | None = Field(default=None, min_length=1)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)

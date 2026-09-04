@@ -10,6 +10,13 @@ class OrganizerProfileRepository(IDAO):
     def get_by_user_id(self, user_id):
         return OrganizerProfile.query.filter_by(user_id=user_id).first()
 
+    def list_by_user_ids(self, user_ids):
+        if not user_ids:
+            return []
+        return OrganizerProfile.query.filter(
+            OrganizerProfile.user_id.in_(user_ids)
+        ).all()
+
     def create(self, commit=True, **kwargs):
         profile = OrganizerProfile(**kwargs)
         db.session.add(profile)
