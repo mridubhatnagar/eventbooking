@@ -12,12 +12,13 @@
 10. Single-tenant payment gateway — one platform-level Razorpay account for everyone, not a separate gateway account per organizer; ruled out entirely, not just deferred.
 11. `GET /events` supports filtering by `city` (exact match), `date_from`/`date_to` (inclusive range), and `industry` (matched via the event's organizer profile).
 12. Free-text search (e.g. searching by event name) is out of scope for now — filters only, no search box.
+17. Booking status is derived from `Payment.status`, never stored separately — `Payment` (`PENDING`/`REQUESTED` → `PROCESSED`|`FAILED`) is the single source of truth. `Booking.status` maps it: `PENDING` while payment is pending/requested, `CONFIRMED` once payment is `PROCESSED`, `FAILED` if payment is `FAILED`. The "Booking Confirmation" notification fires on **payment success** (`Payment.status == PROCESSED`), not at booking creation — a booking can sit at `PENDING` for a while (or end at `FAILED`) with no confirmation ever sent.
 
 ## Deferred to v2
 
 Identified during a senior-engineer-level review of the core build. None of these block core functionality; they matter more at production scale than at current scope.
 
-13. Pagination on `GET /events` and `GET /bookings` — both currently return unbounded result sets.
-14. Explicit DB indexes on filtered/joined columns without one today: `Event.city`, `Event.date`, `Event.user_id`, `Booking.user_id`, `Booking.event_id`, `OrganizerProfile.user_id`.
+13. ~~Pagination on `GET /events` and `GET /bookings`~~ — **not deferred**, implemented on `feature/performance-improvements` (not yet merged): `?limit=`/`?offset=` on both endpoints, `total`/`limit`/`offset` in the response `meta`.
+14. ~~Explicit DB indexes on filtered/joined columns~~ — **not deferred**, also implemented on `feature/performance-improvements`: `Event.city`, `Event.date`, `Event.user_id`, `Booking.user_id`, `Booking.event_id` (migration generated and applied against real Postgres). `OrganizerProfile.user_id` already had an index via its `unique=True` constraint.
 15. A health-check endpoint for load balancer / orchestrator liveness/readiness probes.
 16. Stronger password policy on registration — currently `min_length=1`, i.e. a one-character password is accepted.
