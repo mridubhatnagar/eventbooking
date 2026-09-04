@@ -128,6 +128,51 @@ class TestRegisterEndpoint:
 
         assert response.status_code == 400
 
+    @pytest.mark.parametrize(
+        "field,bad_value",
+        [
+            ("pan_number", "not-a-pan"),
+            ("pan_number", "ABCDE12345"),  # last char must be a letter
+            ("bank_ifsc_code", "not-an-ifsc"),
+            ("bank_ifsc_code", "TEST1001234"),  # 5th char must be 0
+            ("bank_account_number", "12345"),  # too short
+            ("bank_account_number", "not-digits-12345"),
+        ],
+    )
+    def test_invalid_id_format_returns_400(self, client, field, bad_value):
+        payload = self._payload(
+            organizer_profile={**ORGANIZER_PROFILE, field: bad_value}
+        )
+
+        response = client.post("/auth/register", json=payload)
+
+        assert response.status_code == 400
+
+    def test_invalid_gst_format_returns_400(self, client):
+        payload = self._payload(
+            organizer_profile={**ORGANIZER_PROFILE, "gst_number": "not-a-gstin"}
+        )
+
+        response = client.post("/auth/register", json=payload)
+
+        assert response.status_code == 400
+
+    def test_lowercase_pan_is_normalized_to_uppercase(self, app, client):
+        from app.organizer_profiles.repository import OrganizerProfileRepository
+
+        payload = self._payload(
+            email="organizer-lowercase-pan@test.com",
+            organizer_profile={**ORGANIZER_PROFILE, "pan_number": "abcde1234f"},
+        )
+
+        response = client.post("/auth/register", json=payload)
+        assert response.status_code == 201
+        user_id = response.get_json()["data"]["id"]
+
+        with app.app_context():
+            profile = OrganizerProfileRepository().get_by_user_id(user_id)
+            assert profile.pan_number == "ABCDE1234F"
+
 
 class TestUpdateProfileEndpoint:
     def test_missing_jwt_returns_401(self, client):
@@ -153,6 +198,15 @@ class TestUpdateProfileEndpoint:
 
         assert response.status_code == 200
         assert response.get_json()["data"]["company_name"] == "Updated Co"
+
+    def test_invalid_pan_format_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.patch(
+            "/organizers/me", json={"pan_number": "not-a-pan"}, headers=headers
+        )
+
+        assert response.status_code == 400
 
 
 class TestEventOrganizerSerialization:
