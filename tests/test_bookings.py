@@ -264,7 +264,9 @@ class TestBookingErrorMapping:
     exceptions into the documented HTTP status codes, end-to-end through the
     real Flask routing/JWT/validation stack."""
 
-    def test_gateway_error_returns_502(self, client, register_and_login, monkeypatch):
+    def test_gateway_error_returns_502(
+        self, client, register_and_login, monkeypatch, caplog
+    ):
         organizer_id, organizer_headers = register_and_login(Role.ORGANIZER)
         event = _create_event_http(client, organizer_headers)
 
@@ -274,16 +276,18 @@ class TestBookingErrorMapping:
         )
         _, customer_headers = register_and_login(Role.CUSTOMER)
 
-        response = client.post(
-            "/bookings",
-            json={"event_id": event["id"], "quantity": 1},
-            headers=customer_headers,
-        )
+        with caplog.at_level("ERROR"):
+            response = client.post(
+                "/bookings",
+                json={"event_id": event["id"], "quantity": 1},
+                headers=customer_headers,
+            )
 
         assert response.status_code == 502
+        assert "gateway unreachable" in caplog.text
 
     def test_task_enqueue_failure_returns_503(
-        self, client, register_and_login, monkeypatch
+        self, client, register_and_login, monkeypatch, caplog
     ):
         _, organizer_headers = register_and_login(Role.ORGANIZER)
         event = _create_event_http(client, organizer_headers)
@@ -298,13 +302,15 @@ class TestBookingErrorMapping:
         )
         _, customer_headers = register_and_login(Role.CUSTOMER)
 
-        response = client.post(
-            "/bookings",
-            json={"event_id": event["id"], "quantity": 1},
-            headers=customer_headers,
-        )
+        with caplog.at_level("ERROR"):
+            response = client.post(
+                "/bookings",
+                json={"event_id": event["id"], "quantity": 1},
+                headers=customer_headers,
+            )
 
         assert response.status_code == 503
+        assert "broker down" in caplog.text
 
 
 class TestGetBookingEndpoint:
@@ -390,7 +396,7 @@ class TestSendBookingConfirmationTask:
     """Direct execution of the Celery task body (Background Task 1 in
     PLAN.md) — proves its actual side effects, not just that it was enqueued."""
 
-    def test_prints_confirmation_and_records_success_job(self, app, capsys):
+    def test_logs_confirmation_and_records_success_job(self, app, caplog):
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.bookings.repository import BookingRepository
@@ -418,13 +424,13 @@ class TestSendBookingConfirmationTask:
                 user_id=user.id, event_id=event.id, quantity=1
             )
 
-            send_booking_confirmation.apply(
-                args=[booking.id], kwargs={"payment_id": 42}
-            )
+            with caplog.at_level("INFO"):
+                send_booking_confirmation.apply(
+                    args=[booking.id], kwargs={"payment_id": 42}
+                )
 
-            captured = capsys.readouterr()
-            assert user.email in captured.out
-            assert str(booking.id) in captured.out
+            assert user.email in caplog.text
+            assert str(booking.id) in caplog.text
 
             jobs = JobRepository().list(payment_id=42)
             assert len(jobs) == 1

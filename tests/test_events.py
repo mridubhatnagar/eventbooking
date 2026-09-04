@@ -553,7 +553,7 @@ class TestNotifyEventUpdateTask:
     PLAN.md) — proves it notifies every booked customer, not just that it
     was enqueued."""
 
-    def test_notifies_each_booked_customer_and_records_success_job(self, app, capsys):
+    def test_notifies_each_booked_customer_and_records_success_job(self, app, caplog):
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.bookings.repository import BookingRepository
@@ -589,17 +589,17 @@ class TestNotifyEventUpdateTask:
                 user_id=customer_b.id, event_id=event.id, quantity=2
             )
 
-            notify_event_update.apply(args=[event.id])
+            with caplog.at_level("INFO"):
+                notify_event_update.apply(args=[event.id])
 
-            captured = capsys.readouterr()
-            assert customer_a.email in captured.out
-            assert customer_b.email in captured.out
+            assert customer_a.email in caplog.text
+            assert customer_b.email in caplog.text
 
             jobs = JobRepository().list(event_id=event.id)
             assert len(jobs) == 1
             assert jobs[0].status == JobStatus.SUCCESS
 
-    def test_no_bookings_still_records_success_job(self, app, capsys):
+    def test_no_bookings_still_records_success_job(self, app):
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.jobs.repository import JobRepository

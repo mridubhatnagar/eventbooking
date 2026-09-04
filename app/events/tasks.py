@@ -1,3 +1,5 @@
+from flask import current_app
+
 from app.extensions import celery
 from app.bookings.repository import BookingRepository
 from app.users.repository import UserRepository
@@ -23,6 +25,6 @@ def notify_event_update(self, event_id):
     bookings = booking_repository.list(event_id=event_id)
     for booking in bookings:
         user = user_repository.get_by_id(booking.user_id)
-        print(f"[notification] Event {event_id} updated — notifying {user.email}")
+        current_app.logger.info("Event %s updated — notifying %s", event_id, user.email)
 
     job_repository.update(job.id, status=JobStatus.SUCCESS)

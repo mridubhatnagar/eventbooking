@@ -344,7 +344,7 @@ class TestRequestPaymentTask:
             assert jobs[0].status == JobStatus.SUCCESS
 
     def test_capture_failure_marks_job_failed_and_does_not_update_payment(
-        self, app, monkeypatch
+        self, app, monkeypatch, caplog
     ):
         from app.payments.repository import PaymentRepository
         from app.jobs.repository import JobRepository
@@ -364,8 +364,10 @@ class TestRequestPaymentTask:
                 status=PaymentStatus.PENDING,
             )
 
-            result = request_payment.apply(args=[payment.id])
+            with caplog.at_level("ERROR"):
+                result = request_payment.apply(args=[payment.id])
             assert result.failed()
+            assert f"payment {payment.id}" in caplog.text
 
             jobs = JobRepository().list(payment_id=payment.id)
             assert len(jobs) == 1

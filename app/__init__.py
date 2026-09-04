@@ -1,3 +1,5 @@
+import logging
+
 from flask import Flask
 from werkzeug.exceptions import HTTPException
 
@@ -22,6 +24,7 @@ from app.reviews.model import Review  # noqa: F401
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.logger.setLevel(logging.INFO)
 
     db.init_app(app)
     jwt.init_app(app)
@@ -46,10 +49,12 @@ def create_app():
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):
+        app.logger.error(str(e))
         return error(str(e), 503)
 
     @app.errorhandler(GatewayError)
     def handle_gateway_error(e):
+        app.logger.error(str(e))
         return error(str(e), 502)
 
     # Single catch-all, at the app boundary only — not scattered try/excepts
