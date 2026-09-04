@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from app.extensions import db
 from app.bookings.repository import BookingRepository
 from app.events.repository import EventRepository
@@ -23,6 +25,10 @@ class BookingService:
         event = self.event_repository.get_by_id(event_id)
         if not event:
             raise ValueError("event not found")
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if event.date <= now:
+            raise ValueError("cannot book a past event")
 
         if quantity < 1:
             raise ValueError("quantity must be at least 1")

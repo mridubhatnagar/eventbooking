@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -8,6 +8,8 @@ from app.bookings.tasks import send_booking_confirmation
 from app.exceptions import GatewayError, TaskEnqueueError
 from app.payments.tasks import request_payment
 from app.enums import JobStatus, Role
+
+FUTURE_DATE = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=365)
 
 
 @pytest.fixture
@@ -23,7 +25,7 @@ def _seed_event(fake_event_repo, capacity):
     return fake_event_repo.create(
         user_id=1,
         name="Concert",
-        date=datetime(2026, 1, 1, 18, 0),
+        date=FUTURE_DATE,
         venue="Hall A",
         city="Bengaluru",
         capacity=capacity,
@@ -82,6 +84,23 @@ class TestCreateBooking:
         with app.app_context(), pytest.raises(ValueError, match="not found"):
             booking_service.create_booking(user_id=5, event_id=999, quantity=1)
 
+    def test_booking_past_event_raises(self, app, booking_service, fake_event_repo):
+        past_event = fake_event_repo.create(
+            user_id=1,
+            name="Old Concert",
+            date=FUTURE_DATE - timedelta(days=730),
+            venue="Hall A",
+            city="Bengaluru",
+            capacity=10,
+            tickets_sold=0,
+            price=Decimal("10.00"),
+        )
+
+        with app.app_context(), pytest.raises(ValueError, match="past event"):
+            booking_service.create_booking(
+                user_id=5, event_id=past_event.id, quantity=1
+            )
+
     @pytest.mark.parametrize("quantity", [0, -1])
     def test_booking_invalid_quantity_raises(
         self, app, booking_service, fake_event_repo, quantity
@@ -130,7 +149,7 @@ class TestCreateBookingTransactionRollback:
             event = event_repo.create(
                 user_id=1,
                 name="Concert",
-                date=datetime(2026, 1, 1, 18, 0),
+                date=FUTURE_DATE,
                 venue="Hall A",
                 city="Bengaluru",
                 capacity=10,
@@ -165,7 +184,7 @@ def _create_event_http(client, organizer_headers, capacity=10):
         "/events",
         json={
             "name": "Concert",
-            "date": "2026-01-01T18:00:00",
+            "date": FUTURE_DATE.isoformat(),
             "venue": "Hall A",
             "city": "Bengaluru",
             "capacity": capacity,
@@ -199,6 +218,32 @@ class TestCreateBookingEndpoint:
 
         response = client.post(
             "/bookings", json={"event_id": 1, "quantity": 0}, headers=headers
+        )
+
+        assert response.status_code == 400
+
+    def test_past_event_returns_400(self, app, client, register_and_login):
+        from app.events.repository import EventRepository
+
+        organizer_id, _ = register_and_login(Role.ORGANIZER)
+        with app.app_context():
+            past_event = EventRepository().create(
+                user_id=organizer_id,
+                name="Old Concert",
+                date=FUTURE_DATE - timedelta(days=730),
+                venue="Hall A",
+                city="Bengaluru",
+                capacity=10,
+                tickets_sold=0,
+                price=Decimal("10.00"),
+            )
+            past_event_id = past_event.id
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        response = client.post(
+            "/bookings",
+            json={"event_id": past_event_id, "quantity": 1},
+            headers=customer_headers,
         )
 
         assert response.status_code == 400
@@ -352,7 +397,7 @@ class TestSendBookingConfirmationTask:
             event = EventRepository().create(
                 user_id=1,
                 name="Concert",
-                date=datetime(2026, 1, 1, 18, 0),
+                date=FUTURE_DATE,
                 venue="Hall A",
                 city="Bengaluru",
                 capacity=10,
