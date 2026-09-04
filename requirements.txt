@@ -10,4 +10,5 @@ redis==5.0.8
 gunicorn==22.0.0
 python-dotenv==1.0.1
 pydantic==2.9.2
+email-validator==2.2.0
 spectree==1.4.4
