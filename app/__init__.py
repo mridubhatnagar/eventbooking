@@ -1,4 +1,5 @@
 from flask import Flask
+from werkzeug.exceptions import HTTPException
 
 from app.config import Config
 from app.extensions import db, jwt, migrate, configure_celery
@@ -50,6 +51,20 @@ def create_app():
     @app.errorhandler(GatewayError)
     def handle_gateway_error(e):
         return error(str(e), 502)
+
+    # Single catch-all, at the app boundary only — not scattered try/excepts
+    # through services/repositories. Anything not handled by a specific
+    # handler above (or by ValueError/PermissionError/etc. in a controller)
+    # still gets the API's normal JSON envelope instead of a raw Flask/
+    # Werkzeug error page. Flask's own routing exceptions (404, 405, ...)
+    # pass through unchanged — only genuinely unexpected exceptions are
+    # mapped here.
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        if isinstance(e, HTTPException):
+            return e
+        app.logger.exception("Unhandled exception")
+        return error("internal server error", 500)
 
     @jwt.unauthorized_loader
     def handle_missing_token(reason):
