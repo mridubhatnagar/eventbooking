@@ -179,16 +179,26 @@ class TestCreateBookingTransactionRollback:
             assert reloaded.tickets_sold == 0  # capacity reservation was rolled back
 
 
+def _time_fields(dt):
+    hour_12 = dt.hour % 12 or 12
+    return {
+        "event_date": dt.date().isoformat(),
+        "hour": hour_12,
+        "minute": dt.minute,
+        "meridiem": "AM" if dt.hour < 12 else "PM",
+    }
+
+
 def _create_event_http(client, organizer_headers, capacity=10):
     response = client.post(
         "/events",
         json={
             "name": "Concert",
-            "date": FUTURE_DATE.isoformat(),
             "venue": "Hall A",
             "city": "Bengaluru",
             "capacity": capacity,
             "price": "10.00",
+            **_time_fields(FUTURE_DATE),
         },
         headers=organizer_headers,
     )

@@ -15,15 +15,30 @@ auth:bearer {
 }
 
 script:pre-request {
+  // Server assumes IST for event_date/hour/minute (no timezone field at all —
+  // organizers pick a plain date + 12-hour time, see app/timezone.py). Compute
+  // "now + offset" in IST wall-clock terms via the UTC-getter trick, since JS
+  // has no built-in IST timezone helper without a library.
   const offsetSeconds = Number(bru.getVar("reviewEventOffsetSeconds") || 45);
-  const date = new Date(Date.now() + offsetSeconds * 1000);
-  bru.setVar("eventTwoDate", date.toISOString().slice(0, 19));
+  const istMs = Date.now() + 5.5 * 60 * 60 * 1000 + offsetSeconds * 1000;
+  const istNow = new Date(istMs);
+  const hour24 = istNow.getUTCHours();
+  let hour12 = hour24 % 12;
+  if (hour12 === 0) hour12 = 12;
+
+  bru.setVar("eventTwoDate", istNow.toISOString().slice(0, 10));
+  bru.setVar("eventTwoHour", hour12);
+  bru.setVar("eventTwoMinute", istNow.getUTCMinutes());
+  bru.setVar("eventTwoMeridiem", hour24 < 12 ? "AM" : "PM");
 }
 
 body:json {
   {
     "name": "Review Demo Show",
-    "date": "{{eventTwoDate}}",
+    "event_date": "{{eventTwoDate}}",
+    "hour": {{eventTwoHour}},
+    "minute": {{eventTwoMinute}},
+    "meridiem": "{{eventTwoMeridiem}}",
     "venue": "Side Stage",
     "city": "Bengaluru",
     "capacity": 50,

@@ -1,3 +1,5 @@
+from datetime import datetime, time
+
 from app.events.repository import EventRepository
 from app.events.tasks import notify_event_update
 from app.organizer_profiles.repository import OrganizerProfileRepository
@@ -33,8 +35,14 @@ class EventService:
             profiles = self.organizer_profile_repository.list(industry=industry)
             user_ids = [p.user_id for p in profiles]
 
+        # date_from/date_to are plain calendar dates (customers pick a date,
+        # not a datetime) — widen to the full day so date_to's day is
+        # inclusive rather than cutting off at its midnight.
+        date_from_dt = datetime.combine(date_from, time.min) if date_from else None
+        date_to_dt = datetime.combine(date_to, time.max) if date_to else None
+
         return self.event_repository.list_filtered(
-            city=city, date_from=date_from, date_to=date_to, user_ids=user_ids
+            city=city, date_from=date_from_dt, date_to=date_to_dt, user_ids=user_ids
         )
 
     def get_event(self, event_id):

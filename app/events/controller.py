@@ -85,7 +85,11 @@ def get_event(event_id):
 def update_event(event_id):
     data = request.context.json
 
-    fields = data.model_dump(exclude_none=True)
+    fields = data.model_dump(
+        exclude_none=True, exclude={"event_date", "hour", "minute", "meridiem"}
+    )
+    if data.date is not None:
+        fields["date"] = data.date
     user_id = int(get_jwt_identity())
 
     try:

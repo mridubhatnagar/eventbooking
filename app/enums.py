@@ -36,6 +36,11 @@ class WebhookEvent(StrEnum):
     PAYMENT_FAILED = "payment.failed"
 
 
+class Meridiem(StrEnum):
+    AM = "AM"
+    PM = "PM"
+
+
 class Industry(StrEnum):
     MUSIC = "MUSIC"
     SPORTS = "SPORTS"

@@ -7,6 +7,17 @@ from app.enums import Role
 
 FUTURE_DATE = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=365)
 
+
+def _time_fields(dt):
+    hour_12 = dt.hour % 12 or 12
+    return {
+        "event_date": dt.date().isoformat(),
+        "hour": hour_12,
+        "minute": dt.minute,
+        "meridiem": "AM" if dt.hour < 12 else "PM",
+    }
+
+
 ORGANIZER_PROFILE = {
     "company_name": "Test Events Co",
     "city": "Bengaluru",
@@ -153,11 +164,11 @@ class TestEventOrganizerSerialization:
             "/events",
             json={
                 "name": "Concert",
-                "date": FUTURE_DATE.isoformat(),
                 "venue": "Hall A",
                 "city": "Bengaluru",
                 "capacity": 10,
                 "price": "10.00",
+                **_time_fields(FUTURE_DATE),
             },
             headers=organizer_headers,
         ).get_json()["data"]

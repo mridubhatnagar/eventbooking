@@ -41,13 +41,13 @@ Swagger UI: `http://localhost:5000/apidoc/swagger/` (adjust the port if overridd
    ```
 3. `POST /auth/login` as the organizer → copy `data.access_token` from the response.
 4. Click **Authorize** (lock icon, top right), paste the organizer's token, click Authorize, close the dialog.
-5. `POST /events` — create the main demo event:
+5. `POST /events` — create the main demo event. Organizers pick a plain calendar date + a 12-hour time (`hour`/`minute`/`meridiem`) — no ISO datetime string or timezone offset, IST is assumed:
    ```json
-   {"name": "Demo Concert", "date": "2026-12-01T18:00:00", "venue": "Main Hall", "city": "Bengaluru", "capacity": 50, "price": "25.00"}
+   {"name": "Demo Concert", "event_date": "2026-12-01", "hour": 6, "minute": 0, "meridiem": "PM", "venue": "Main Hall", "city": "Bengaluru", "capacity": 50, "price": "25.00"}
    ```
-6. `POST /events` again — a **second** event dated in the past, solely to demonstrate reviews (a review can only be left once the event has actually happened — see step 14):
+6. `POST /events` again — a **second** event, solely to demonstrate reviews (a review can only be left once the event has actually happened — see step 14). Since past dates are rejected on create, set `event_date`/`hour`/`minute` to a few minutes from whenever you're actually recording, then wait for it to pass before the review step:
    ```json
-   {"name": "Demo Past Show", "date": "2025-01-01T18:00:00", "venue": "Side Stage", "city": "Bengaluru", "capacity": 50, "price": "15.00"}
+   {"name": "Demo Past Show", "event_date": "2026-12-01", "hour": 6, "minute": 2, "meridiem": "PM", "venue": "Side Stage", "city": "Bengaluru", "capacity": 50, "price": "15.00"}
    ```
 7. `PATCH /events/{id}` on the main event (e.g. change the venue) — triggers the Event Update Notification task. Nothing to check in Swagger for this one; watch `docker compose logs -f worker` for the `[notification] ...` line.
 8. `PATCH /organizers/me` — organizer edits their own profile (e.g. `{"company_name": "Demo Events Co, Ltd"}`). Still authorized as the organizer.

@@ -185,14 +185,26 @@ class TestUpdateEvent:
         assert calls == [event.id]
 
 
+def _time_fields(dt):
+    """Convert a datetime into the organizer-friendly event_date/hour/minute/
+    meridiem fields the API now expects, instead of a raw ISO datetime."""
+    hour_12 = dt.hour % 12 or 12
+    return {
+        "event_date": dt.date().isoformat(),
+        "hour": hour_12,
+        "minute": dt.minute,
+        "meridiem": "AM" if dt.hour < 12 else "PM",
+    }
+
+
 def _valid_event_payload(**overrides):
     payload = {
         "name": "Concert",
-        "date": FUTURE_DATE.isoformat(),
         "venue": "Hall A",
         "city": "Bengaluru",
         "capacity": 100,
         "price": "10.00",
+        **_time_fields(FUTURE_DATE),
     }
     payload.update(overrides)
     return payload
@@ -250,26 +262,31 @@ class TestCreateEventEndpoint:
 
     def test_past_date_returns_400(self, client, register_and_login):
         _, headers = register_and_login(Role.ORGANIZER)
-        past_date = (
-            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
-        ).isoformat()
+        past_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
 
         response = client.post(
-            "/events", json=_valid_event_payload(date=past_date), headers=headers
+            "/events",
+            json=_valid_event_payload(**_time_fields(past_date)),
+            headers=headers,
         )
 
         assert response.status_code == 400
 
-    def test_timezone_aware_date_returns_400_not_500(self, client, register_and_login):
-        """Regression test: a client-sent date with a UTC offset must not
-        crash (naive vs aware datetime comparison) — it's cleanly rejected,
-        since the API only ever documents/sends naive (IST-assumed) dates."""
+    def test_hour_out_of_range_returns_400(self, client, register_and_login):
         _, headers = register_and_login(Role.ORGANIZER)
-        future_date = FUTURE_DATE.isoformat() + "+05:30"
 
         response = client.post(
-            "/events", json=_valid_event_payload(date=future_date), headers=headers
+            "/events", json=_valid_event_payload(hour=13), headers=headers
         )
+
+        assert response.status_code == 400
+
+    def test_missing_meridiem_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        payload = _valid_event_payload()
+        del payload["meridiem"]
+
+        response = client.post("/events", json=payload, headers=headers)
 
         assert response.status_code == 400
 
@@ -312,18 +329,20 @@ class TestListEventsFilterEndpoint:
         far = FUTURE_DATE + timedelta(days=90)
         client.post(
             "/events",
-            json=_valid_event_payload(name="Near Event", date=near.isoformat()),
+            json=_valid_event_payload(name="Near Event", **_time_fields(near)),
             headers=organizer_headers,
         )
         client.post(
             "/events",
-            json=_valid_event_payload(name="Far Event", date=far.isoformat()),
+            json=_valid_event_payload(name="Far Event", **_time_fields(far)),
             headers=organizer_headers,
         )
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
+        date_from = (near + timedelta(days=1)).date().isoformat()
+        date_to = (far + timedelta(days=1)).date().isoformat()
         response = client.get(
-            f"/events?date_from={(near + timedelta(days=1)).isoformat()}&date_to={(far + timedelta(days=1)).isoformat()}",
+            f"/events?date_from={date_from}&date_to={date_to}",
             headers=customer_headers,
         )
 
@@ -387,12 +406,24 @@ class TestUpdateEventEndpoint:
         created = client.post(
             "/events", json=_valid_event_payload(), headers=headers
         ).get_json()["data"]
-        past_date = (
-            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
-        ).isoformat()
+        past_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
 
         response = client.patch(
-            f"/events/{created['id']}", json={"date": past_date}, headers=headers
+            f"/events/{created['id']}", json=_time_fields(past_date), headers=headers
+        )
+
+        assert response.status_code == 400
+
+    def test_partial_date_time_fields_returns_400(self, client, register_and_login):
+        """event_date/hour/minute/meridiem must be provided together, not
+        partially — there's no existing value to merge a lone field into."""
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+
+        response = client.patch(
+            f"/events/{created['id']}", json={"hour": 5}, headers=headers
         )
 
         assert response.status_code == 400
