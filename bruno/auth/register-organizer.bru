@@ -1,0 +1,31 @@
+meta {
+  name: Register Organizer
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "organizer@demo.com",
+    "phone": "1234567890",
+    "password": "pass1234",
+    "role": "organizer",
+    "organizer_profile": {
+      "company_name": "Demo Events Co",
+      "city": "Bengaluru",
+      "address": "123 MG Road, Bengaluru",
+      "industry": "MUSIC",
+      "pan_number": "ABCDE1234F",
+      "bank_account_holder_name": "Demo Events Co",
+      "bank_account_number": "000123456789",
+      "bank_ifsc_code": "DEMO0001234",
+      "bank_name": "Demo Bank"
+    }
+  }
+}

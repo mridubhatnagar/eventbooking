@@ -101,6 +101,36 @@ class TestRegisterEndpoint:
         assert body["email"] == "http-register@test.com"
         assert body["role"] == Role.CUSTOMER
 
+    @pytest.mark.parametrize(
+        "bad_email",
+        ["not-an-email", "missing-domain@", "@missing-local.com", "no-at-sign.com", ""],
+    )
+    def test_register_invalid_email_returns_400(self, client, bad_email):
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": bad_email,
+                "phone": "555-1234",
+                "password": "pw123456",
+                "role": Role.CUSTOMER,
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.parametrize("short_password", ["", "a", "1234567"])
+    def test_register_short_password_returns_400(self, client, short_password):
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": "short-pw@test.com",
+                "password": short_password,
+                "role": Role.CUSTOMER,
+            },
+        )
+
+        assert response.status_code == 400
+
     def test_register_missing_required_field_returns_400(self, client):
         response = client.post(
             "/auth/register", json={"email": "no-password@test.com", "role": "customer"}
@@ -168,3 +198,11 @@ class TestLoginEndpoint:
         )
 
         assert response.status_code == 401
+
+    def test_login_invalid_email_format_returns_400(self, client):
+        response = client.post(
+            "/auth/login",
+            json={"email": "not-an-email", "password": "correct-pw"},
+        )
+
+        assert response.status_code == 400

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -8,6 +8,8 @@ from app.bookings.tasks import send_booking_confirmation
 from app.exceptions import GatewayError, TaskEnqueueError
 from app.payments.tasks import request_payment
 from app.enums import JobStatus, Role
+
+FUTURE_DATE = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=365)
 
 
 @pytest.fixture
@@ -23,7 +25,7 @@ def _seed_event(fake_event_repo, capacity):
     return fake_event_repo.create(
         user_id=1,
         name="Concert",
-        date=datetime(2026, 1, 1, 18, 0),
+        date=FUTURE_DATE,
         venue="Hall A",
         city="Bengaluru",
         capacity=capacity,
@@ -82,6 +84,23 @@ class TestCreateBooking:
         with app.app_context(), pytest.raises(ValueError, match="not found"):
             booking_service.create_booking(user_id=5, event_id=999, quantity=1)
 
+    def test_booking_past_event_raises(self, app, booking_service, fake_event_repo):
+        past_event = fake_event_repo.create(
+            user_id=1,
+            name="Old Concert",
+            date=FUTURE_DATE - timedelta(days=730),
+            venue="Hall A",
+            city="Bengaluru",
+            capacity=10,
+            tickets_sold=0,
+            price=Decimal("10.00"),
+        )
+
+        with app.app_context(), pytest.raises(ValueError, match="past event"):
+            booking_service.create_booking(
+                user_id=5, event_id=past_event.id, quantity=1
+            )
+
     @pytest.mark.parametrize("quantity", [0, -1])
     def test_booking_invalid_quantity_raises(
         self, app, booking_service, fake_event_repo, quantity
@@ -130,7 +149,7 @@ class TestCreateBookingTransactionRollback:
             event = event_repo.create(
                 user_id=1,
                 name="Concert",
-                date=datetime(2026, 1, 1, 18, 0),
+                date=FUTURE_DATE,
                 venue="Hall A",
                 city="Bengaluru",
                 capacity=10,
@@ -160,16 +179,26 @@ class TestCreateBookingTransactionRollback:
             assert reloaded.tickets_sold == 0  # capacity reservation was rolled back
 
 
+def _time_fields(dt):
+    hour_12 = dt.hour % 12 or 12
+    return {
+        "event_date": dt.date().isoformat(),
+        "hour": hour_12,
+        "minute": dt.minute,
+        "meridiem": "AM" if dt.hour < 12 else "PM",
+    }
+
+
 def _create_event_http(client, organizer_headers, capacity=10):
     response = client.post(
         "/events",
         json={
             "name": "Concert",
-            "date": "2026-01-01T18:00:00",
             "venue": "Hall A",
             "city": "Bengaluru",
             "capacity": capacity,
             "price": "10.00",
+            **_time_fields(FUTURE_DATE),
         },
         headers=organizer_headers,
     )
@@ -203,13 +232,41 @@ class TestCreateBookingEndpoint:
 
         assert response.status_code == 400
 
+    def test_past_event_returns_400(self, app, client, register_and_login):
+        from app.events.repository import EventRepository
+
+        organizer_id, _ = register_and_login(Role.ORGANIZER)
+        with app.app_context():
+            past_event = EventRepository().create(
+                user_id=organizer_id,
+                name="Old Concert",
+                date=FUTURE_DATE - timedelta(days=730),
+                venue="Hall A",
+                city="Bengaluru",
+                capacity=10,
+                tickets_sold=0,
+                price=Decimal("10.00"),
+            )
+            past_event_id = past_event.id
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        response = client.post(
+            "/bookings",
+            json={"event_id": past_event_id, "quantity": 1},
+            headers=customer_headers,
+        )
+
+        assert response.status_code == 400
+
 
 class TestBookingErrorMapping:
     """Proves app/__init__.py's error handlers actually translate service-layer
     exceptions into the documented HTTP status codes, end-to-end through the
     real Flask routing/JWT/validation stack."""
 
-    def test_gateway_error_returns_502(self, client, register_and_login, monkeypatch):
+    def test_gateway_error_returns_502(
+        self, client, register_and_login, monkeypatch, caplog
+    ):
         organizer_id, organizer_headers = register_and_login(Role.ORGANIZER)
         event = _create_event_http(client, organizer_headers)
 
@@ -219,16 +276,18 @@ class TestBookingErrorMapping:
         )
         _, customer_headers = register_and_login(Role.CUSTOMER)
 
-        response = client.post(
-            "/bookings",
-            json={"event_id": event["id"], "quantity": 1},
-            headers=customer_headers,
-        )
+        with caplog.at_level("ERROR"):
+            response = client.post(
+                "/bookings",
+                json={"event_id": event["id"], "quantity": 1},
+                headers=customer_headers,
+            )
 
         assert response.status_code == 502
+        assert "gateway unreachable" in caplog.text
 
     def test_task_enqueue_failure_returns_503(
-        self, client, register_and_login, monkeypatch
+        self, client, register_and_login, monkeypatch, caplog
     ):
         _, organizer_headers = register_and_login(Role.ORGANIZER)
         event = _create_event_http(client, organizer_headers)
@@ -243,13 +302,15 @@ class TestBookingErrorMapping:
         )
         _, customer_headers = register_and_login(Role.CUSTOMER)
 
-        response = client.post(
-            "/bookings",
-            json={"event_id": event["id"], "quantity": 1},
-            headers=customer_headers,
-        )
+        with caplog.at_level("ERROR"):
+            response = client.post(
+                "/bookings",
+                json={"event_id": event["id"], "quantity": 1},
+                headers=customer_headers,
+            )
 
         assert response.status_code == 503
+        assert "broker down" in caplog.text
 
 
 class TestGetBookingEndpoint:
@@ -360,7 +421,7 @@ class TestSendBookingConfirmationTask:
     """Direct execution of the Celery task body (Background Task 1 in
     PLAN.md) — proves its actual side effects, not just that it was enqueued."""
 
-    def test_prints_confirmation_and_records_success_job(self, app, capsys):
+    def test_logs_confirmation_and_records_success_job(self, app, caplog):
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.bookings.repository import BookingRepository
@@ -377,7 +438,7 @@ class TestSendBookingConfirmationTask:
             event = EventRepository().create(
                 user_id=1,
                 name="Concert",
-                date=datetime(2026, 1, 1, 18, 0),
+                date=FUTURE_DATE,
                 venue="Hall A",
                 city="Bengaluru",
                 capacity=10,
@@ -388,13 +449,13 @@ class TestSendBookingConfirmationTask:
                 user_id=user.id, event_id=event.id, quantity=1
             )
 
-            send_booking_confirmation.apply(
-                args=[booking.id], kwargs={"payment_id": 42}
-            )
+            with caplog.at_level("INFO"):
+                send_booking_confirmation.apply(
+                    args=[booking.id], kwargs={"payment_id": 42}
+                )
 
-            captured = capsys.readouterr()
-            assert user.email in captured.out
-            assert str(booking.id) in captured.out
+            assert user.email in caplog.text
+            assert str(booking.id) in caplog.text
 
             jobs = JobRepository().list(payment_id=42)
             assert len(jobs) == 1

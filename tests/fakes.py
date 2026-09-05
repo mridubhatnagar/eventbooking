@@ -67,6 +67,28 @@ class FakeUserRepository(_FakeRepositoryBase):
 class FakeEventRepository(_FakeRepositoryBase):
     model_cls = Event
 
+    def delete_if_no_bookings(self, id):
+        event = self._store.get(id)
+        if not event or event.tickets_sold != 0:
+            return False
+        del self._store[id]
+        return True
+
+    def list_filtered(
+        self, city=None, date_from=None, date_to=None, user_ids=None, limit=20, offset=0
+    ):
+        events = self._store.values()
+        if city:
+            events = (e for e in events if e.city == city)
+        if date_from:
+            events = (e for e in events if e.date >= date_from)
+        if date_to:
+            events = (e for e in events if e.date <= date_to)
+        if user_ids is not None:
+            events = (e for e in events if e.user_id in user_ids)
+        items = list(events)
+        return items[offset : offset + limit], len(items)
+
     def try_reserve_capacity(self, event_id, quantity, commit=True):
         event = self._store.get(event_id)
         if not event:

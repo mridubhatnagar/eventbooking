@@ -1,0 +1,14 @@
+meta {
+  name: List Event Reviews
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/events/{{eventId2}}/reviews
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}

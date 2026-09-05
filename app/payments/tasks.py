@@ -28,6 +28,9 @@ def request_payment(self, payment_id):
     try:
         capture_payment(payment.order_id)
     except Exception:
+        current_app.logger.exception(
+            "capture_payment failed for payment %s", payment_id
+        )
         job_repository.update(job.id, status=JobStatus.FAILED)
         raise
 
@@ -61,6 +64,14 @@ def trigger_gateway_callback(self, order_id, event_type):
         headers={"x-api-key": current_app.config["MOCK_TRIGGER_API_KEY"]},
         timeout=10,
     )
+
+    if not response.ok:
+        current_app.logger.error(
+            "mock trigger webhook call failed for order %s: %s %s",
+            order_id,
+            response.status_code,
+            response.text,
+        )
 
     job_repository.update(
         job.id, status=JobStatus.SUCCESS if response.ok else JobStatus.FAILED

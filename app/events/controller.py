@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.decorators import role_required
-from app.events.service import EventService
+from app.events.service import EventService, EventHasBookingsError
 from app.events.schemas import CreateEventRequest, UpdateEventRequest, ListEventsQuery
 from app.organizer_profiles.service import OrganizerProfileService
 from app.enums import Role
@@ -65,7 +65,12 @@ def create_event():
 def list_events():
     query = request.context.query
     events, total = event_service.list_events(
-        city=query.city, limit=query.limit, offset=query.offset
+        city=query.city,
+        date_from=query.date_from,
+        date_to=query.date_to,
+        industry=query.industry,
+        limit=query.limit,
+        offset=query.offset,
     )
     profiles_by_user_id = organizer_profile_service.get_by_user_ids(
         {e.user_id for e in events}
@@ -94,7 +99,11 @@ def get_event(event_id):
 def update_event(event_id):
     data = request.context.json
 
-    fields = data.model_dump(exclude_none=True)
+    fields = data.model_dump(
+        exclude_none=True, exclude={"event_date", "hour", "minute", "meridiem"}
+    )
+    if data.date is not None:
+        fields["date"] = data.date
     user_id = int(get_jwt_identity())
 
     try:
@@ -105,3 +114,21 @@ def update_event(event_id):
         return error(str(e), 403)
 
     return success(_serialize_one(event), 200)
+
+
+@bp.delete("/<int:event_id>")
+@role_required(Role.ORGANIZER)
+@api.validate(tags=["events"], security=JWT_SECURITY)
+def delete_event(event_id):
+    user_id = int(get_jwt_identity())
+
+    try:
+        event_service.delete_event(event_id, user_id)
+    except ValueError as e:
+        return error(str(e), 404)
+    except PermissionError as e:
+        return error(str(e), 403)
+    except EventHasBookingsError as e:
+        return error(str(e), 409)
+
+    return success(None, 200)

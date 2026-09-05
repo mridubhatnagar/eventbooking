@@ -95,10 +95,10 @@ Payment's status fields (`gateway_status`, `status`) and `order_id` are defined 
 
 **Events**
 - `POST /events` — create event (organizer only)
-- `GET /events` — list events (browse, both roles), optional `?city=` filter (exact match); paginated via `?limit=` (default 20, max 100) / `?offset=` (default 0), `total`/`limit`/`offset` returned in the response's `meta`
+- `GET /events` — list events (browse, both roles), optional filters: `?city=` (exact match), `?date_from=`/`?date_to=` (inclusive date range), `?industry=` (via the event's organizer profile) — no free-text search; paginated via `?limit=` (default 20, max 100) / `?offset=` (default 0), `total`/`limit`/`offset` returned in the response's `meta`
 - `GET /events/:id` — event detail
 - `PATCH /events/:id` — update event (organizer only, own events) — triggers Event Update Notification task
-- *(delete/cancel event — not discussed, omitted for now)*
+- `DELETE /events/:id` — delete event (organizer only, own events) — only allowed if the event has zero bookings (`tickets_sold == 0`); `409` otherwise, to avoid needing cancellation/refund handling
 
 **Bookings**
 - `POST /bookings` — book an event (customer only) — checks capacity, creates `Booking` + `Payment`, kicks off payment flow
@@ -126,6 +126,11 @@ Mirrors real Razorpay: HMAC-SHA256 over the raw request body, shared secret from
 ## Deferred (out of scope for core build)
 - **Organizer settlement/payout ledger** — planned for v2, not this build.
 - **Razorpay Route / true multi-tenant per-organizer gateway accounts** — dropped entirely, not planned at all (single-tenant is the permanent design, not just a v1 stopgap).
+- **Free-text search on events** — filters only (`city`, `date_from`/`date_to`, `industry`); planned for v2.
+- **Pagination** on `GET /events` and `GET /bookings` — planned for v2.
+- **Explicit DB indexes** on `Event.city`/`date`/`user_id`, `Booking.user_id`/`event_id`, `OrganizerProfile.user_id` — planned for v2, ahead of any real scale.
+- **Health-check endpoint** for load balancer / orchestrator probes — planned for v2.
+- **Stronger password policy** on registration — planned for v2.
 
 ---
 *Core plan fully frozen — nothing left in Open/To Be Frozen. Only the Deferred items above remain out of scope by design. Ready to move to implementation.*

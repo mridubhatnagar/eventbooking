@@ -1,0 +1,28 @@
+meta {
+  name: Review Review-Demo Event (expect 201)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/bookings/{{bookingId2}}/reviews
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}
+
+body:json {
+  {
+    "rating": 5,
+    "review_text": "Great show!"
+  }
+}
+
+docs {
+  Only succeeds once the review demo event's date (Events > Create Review
+  Demo Event, now + reviewEventOffsetSeconds) has actually elapsed — retry
+  after waiting if you still get 400.
+}

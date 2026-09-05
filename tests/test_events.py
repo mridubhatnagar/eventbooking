@@ -1,16 +1,21 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
-from app.events.service import EventService
+from app.events.service import EventService, EventHasBookingsError
 from app.events.tasks import notify_event_update
 from app.enums import JobStatus, Role
 
+FUTURE_DATE = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=365)
+
 
 @pytest.fixture
-def event_service(fake_event_repo):
-    return EventService(event_repository=fake_event_repo)
+def event_service(fake_event_repo, fake_organizer_profile_repo):
+    return EventService(
+        event_repository=fake_event_repo,
+        organizer_profile_repository=fake_organizer_profile_repo,
+    )
 
 
 ORGANIZER_ID = 1
@@ -65,6 +70,83 @@ class TestListEvents:
         assert {e.name for e in events} == expected_names
         assert total == len(expected_names)
 
+    def test_list_filters_by_date_range(self, event_service):
+        event_service.create_event(
+            ORGANIZER_ID,
+            "Early Bird",
+            FUTURE_DATE,
+            "Hall A",
+            "Bengaluru",
+            capacity=10,
+            price=Decimal("10.00"),
+        )
+        event_service.create_event(
+            ORGANIZER_ID,
+            "Late Show",
+            FUTURE_DATE + timedelta(days=30),
+            "Hall A",
+            "Bengaluru",
+            capacity=10,
+            price=Decimal("10.00"),
+        )
+
+        events, total = event_service.list_events(
+            date_from=FUTURE_DATE + timedelta(days=1),
+            date_to=FUTURE_DATE + timedelta(days=60),
+        )
+
+        assert {e.name for e in events} == {"Late Show"}
+        assert total == 1
+
+    def test_list_filters_by_industry(self, event_service, fake_organizer_profile_repo):
+        fake_organizer_profile_repo.create(
+            user_id=ORGANIZER_ID,
+            company_name="Music Co",
+            city="Bengaluru",
+            address="123 St",
+            industry="MUSIC",
+            pan_number="ABCDE1234F",
+            bank_account_holder_name="Music Co",
+            bank_account_number="000123456789",
+            bank_ifsc_code="TEST0001234",
+            bank_name="Test Bank",
+        )
+        fake_organizer_profile_repo.create(
+            user_id=OTHER_ORGANIZER_ID,
+            company_name="Sports Co",
+            city="Bengaluru",
+            address="123 St",
+            industry="SPORTS",
+            pan_number="ABCDE1234F",
+            bank_account_holder_name="Sports Co",
+            bank_account_number="000123456789",
+            bank_ifsc_code="TEST0001234",
+            bank_name="Test Bank",
+        )
+        event_service.create_event(
+            ORGANIZER_ID,
+            "Concert",
+            FUTURE_DATE,
+            "Hall A",
+            "Bengaluru",
+            capacity=10,
+            price=Decimal("10.00"),
+        )
+        event_service.create_event(
+            OTHER_ORGANIZER_ID,
+            "Match",
+            FUTURE_DATE,
+            "Stadium",
+            "Bengaluru",
+            capacity=10,
+            price=Decimal("10.00"),
+        )
+
+        events, total = event_service.list_events(industry="MUSIC")
+
+        assert {e.name for e in events} == {"Concert"}
+        assert total == 1
+
 
 class TestGetEvent:
     def test_get_nonexistent_event_raises(self, event_service):
@@ -106,14 +188,26 @@ class TestUpdateEvent:
         assert calls == [event.id]
 
 
+def _time_fields(dt):
+    """Convert a datetime into the organizer-friendly event_date/hour/minute/
+    meridiem fields the API now expects, instead of a raw ISO datetime."""
+    hour_12 = dt.hour % 12 or 12
+    return {
+        "event_date": dt.date().isoformat(),
+        "hour": hour_12,
+        "minute": dt.minute,
+        "meridiem": "AM" if dt.hour < 12 else "PM",
+    }
+
+
 def _valid_event_payload(**overrides):
     payload = {
         "name": "Concert",
-        "date": "2026-01-01T18:00:00",
         "venue": "Hall A",
         "city": "Bengaluru",
         "capacity": 100,
         "price": "10.00",
+        **_time_fields(FUTURE_DATE),
     }
     payload.update(overrides)
     return payload
@@ -169,6 +263,50 @@ class TestCreateEventEndpoint:
 
         assert response.status_code == 400
 
+    def test_past_date_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        past_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+
+        response = client.post(
+            "/events",
+            json=_valid_event_payload(**_time_fields(past_date)),
+            headers=headers,
+        )
+
+        assert response.status_code == 400
+
+    def test_hour_out_of_range_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.post(
+            "/events", json=_valid_event_payload(hour=13), headers=headers
+        )
+
+        assert response.status_code == 400
+
+    def test_missing_meridiem_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        payload = _valid_event_payload()
+        del payload["meridiem"]
+
+        response = client.post("/events", json=payload, headers=headers)
+
+        assert response.status_code == 400
+
+    @pytest.mark.parametrize("bad_meridiem", ["am", "Am", "NOON", "XX", ""])
+    def test_invalid_meridiem_returns_400(
+        self, client, register_and_login, bad_meridiem
+    ):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.post(
+            "/events",
+            json=_valid_event_payload(meridiem=bad_meridiem),
+            headers=headers,
+        )
+
+        assert response.status_code == 400
+
 
 class TestGetEventEndpoint:
     def test_get_nonexistent_event_returns_404(self, client, register_and_login):
@@ -182,6 +320,51 @@ class TestGetEventEndpoint:
         response = client.get("/events/1")
 
         assert response.status_code == 401
+
+
+class TestListEventsFilterEndpoint:
+    """register_and_login's default organizer_profile has industry MUSIC."""
+
+    def test_industry_filter(self, client, register_and_login):
+        _, organizer_headers = register_and_login(Role.ORGANIZER)
+        client.post("/events", json=_valid_event_payload(), headers=organizer_headers)
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        matching = client.get(
+            "/events?industry=MUSIC", headers=customer_headers
+        ).get_json()["data"]
+        non_matching = client.get(
+            "/events?industry=SPORTS", headers=customer_headers
+        ).get_json()["data"]
+
+        assert any(e["name"] == "Concert" for e in matching)
+        assert non_matching == []
+
+    def test_date_range_filter(self, client, register_and_login):
+        _, organizer_headers = register_and_login(Role.ORGANIZER)
+        near = FUTURE_DATE
+        far = FUTURE_DATE + timedelta(days=90)
+        client.post(
+            "/events",
+            json=_valid_event_payload(name="Near Event", **_time_fields(near)),
+            headers=organizer_headers,
+        )
+        client.post(
+            "/events",
+            json=_valid_event_payload(name="Far Event", **_time_fields(far)),
+            headers=organizer_headers,
+        )
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        date_from = (near + timedelta(days=1)).date().isoformat()
+        date_to = (far + timedelta(days=1)).date().isoformat()
+        response = client.get(
+            f"/events?date_from={date_from}&date_to={date_to}",
+            headers=customer_headers,
+        )
+
+        names = {e["name"] for e in response.get_json()["data"]}
+        assert names == {"Far Event"}
 
 
 class TestListEventsPaginationEndpoint:
@@ -276,13 +459,145 @@ class TestUpdateEventEndpoint:
         assert response.get_json()["data"]["venue"] == "Hall B"
         assert calls == [created["id"]]
 
+    def test_past_date_returns_400(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+        past_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
+
+        response = client.patch(
+            f"/events/{created['id']}", json=_time_fields(past_date), headers=headers
+        )
+
+        assert response.status_code == 400
+
+    def test_partial_date_time_fields_returns_400(self, client, register_and_login):
+        """event_date/hour/minute/meridiem must be provided together, not
+        partially — there's no existing value to merge a lone field into."""
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+
+        response = client.patch(
+            f"/events/{created['id']}", json={"hour": 5}, headers=headers
+        )
+
+        assert response.status_code == 400
+
+
+class TestDeleteEventEndpoint:
+    def test_owner_can_delete_event_with_no_bookings(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+
+        response = client.delete(f"/events/{created['id']}", headers=headers)
+
+        assert response.status_code == 200
+        assert (
+            client.get(f"/events/{created['id']}", headers=headers).status_code == 404
+        )
+
+    def test_customer_role_forbidden(self, client, register_and_login):
+        _, organizer_headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=organizer_headers
+        ).get_json()["data"]
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        response = client.delete(f"/events/{created['id']}", headers=customer_headers)
+
+        assert response.status_code == 403
+
+    def test_non_owner_organizer_returns_403(self, client, register_and_login):
+        _, owner_headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=owner_headers
+        ).get_json()["data"]
+
+        _, other_headers = register_and_login(Role.ORGANIZER)
+        response = client.delete(f"/events/{created['id']}", headers=other_headers)
+
+        assert response.status_code == 403
+
+    def test_nonexistent_event_returns_404(self, client, register_and_login):
+        _, headers = register_and_login(Role.ORGANIZER)
+
+        response = client.delete("/events/999999", headers=headers)
+
+        assert response.status_code == 404
+
+    def test_event_with_bookings_returns_409(
+        self, client, register_and_login, monkeypatch
+    ):
+        from app.payments.tasks import request_payment
+
+        monkeypatch.setattr(request_payment, "delay", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            "app.bookings.service.create_order", lambda amount: "order_test123"
+        )
+
+        _, organizer_headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=organizer_headers
+        ).get_json()["data"]
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+        booking_response = client.post(
+            "/bookings",
+            json={"event_id": created["id"], "quantity": 1},
+            headers=customer_headers,
+        )
+        assert booking_response.status_code == 201, booking_response.get_json()
+
+        response = client.delete(f"/events/{created['id']}", headers=organizer_headers)
+
+        assert response.status_code == 409
+
+    def test_concurrent_booking_between_check_and_delete_is_not_deleted(
+        self, app, client, register_and_login
+    ):
+        """TOCTOU regression test: simulates a booking landing in the gap
+        between the ownership check and the delete — proves the atomic
+        conditional DELETE catches live DB state, not the stale event
+        object read earlier, so the event survives instead of being
+        deleted out from under a fresh booking."""
+        from app.events.repository import EventRepository
+        from app.events.service import EventService
+
+        _, headers = register_and_login(Role.ORGANIZER)
+        created = client.post(
+            "/events", json=_valid_event_payload(), headers=headers
+        ).get_json()["data"]
+
+        with app.app_context():
+            event_repo = EventRepository()
+            service = EventService(event_repository=event_repo)
+            original_get_event = service.get_event
+
+            def get_event_then_simulate_concurrent_booking(event_id):
+                event = original_get_event(event_id)
+                # A booking commits here, in the gap after the check.
+                event_repo.update(event_id, tickets_sold=1)
+                return event
+
+            service.get_event = get_event_then_simulate_concurrent_booking
+
+            with pytest.raises(EventHasBookingsError):
+                service.delete_event(created["id"], created["user_id"])
+
+            assert event_repo.get_by_id(created["id"]) is not None
+
 
 class TestNotifyEventUpdateTask:
     """Direct execution of the Celery task body (Background Task 2 in
     PLAN.md) — proves it notifies every booked customer, not just that it
     was enqueued."""
 
-    def test_notifies_each_booked_customer_and_records_success_job(self, app, capsys):
+    def test_notifies_each_booked_customer_and_records_success_job(self, app, caplog):
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.bookings.repository import BookingRepository
@@ -298,7 +613,7 @@ class TestNotifyEventUpdateTask:
             event = EventRepository().create(
                 user_id=organizer.id,
                 name="Concert",
-                date=datetime(2026, 1, 1, 18, 0),
+                date=FUTURE_DATE,
                 venue="Hall A",
                 city="Bengaluru",
                 capacity=10,
@@ -318,17 +633,17 @@ class TestNotifyEventUpdateTask:
                 user_id=customer_b.id, event_id=event.id, quantity=2
             )
 
-            notify_event_update.apply(args=[event.id])
+            with caplog.at_level("INFO"):
+                notify_event_update.apply(args=[event.id])
 
-            captured = capsys.readouterr()
-            assert customer_a.email in captured.out
-            assert customer_b.email in captured.out
+            assert customer_a.email in caplog.text
+            assert customer_b.email in caplog.text
 
             jobs = JobRepository().list(event_id=event.id)
             assert len(jobs) == 1
             assert jobs[0].status == JobStatus.SUCCESS
 
-    def test_no_bookings_still_records_success_job(self, app, capsys):
+    def test_no_bookings_still_records_success_job(self, app):
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.jobs.repository import JobRepository
@@ -343,7 +658,7 @@ class TestNotifyEventUpdateTask:
             event = EventRepository().create(
                 user_id=organizer.id,
                 name="Empty",
-                date=datetime(2026, 1, 1, 18, 0),
+                date=FUTURE_DATE,
                 venue="Hall A",
                 city="Bengaluru",
                 capacity=10,

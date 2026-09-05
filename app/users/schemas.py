@@ -1,13 +1,13 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.enums import Role
 from app.organizer_profiles.schemas import OrganizerProfileFields
 
 
 class RegisterRequest(BaseModel):
-    email: str = Field(min_length=1)
+    email: EmailStr
     phone: str | None = None
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=8)
     role: Role
     # Required when role == organizer (see validator below); rejected for customers.
     organizer_profile: OrganizerProfileFields | None = None
@@ -22,5 +22,5 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(min_length=1)
+    email: EmailStr
     password: str = Field(min_length=1)

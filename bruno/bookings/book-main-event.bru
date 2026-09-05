@@ -1,0 +1,32 @@
+meta {
+  name: Book Main Event
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}
+
+body:json {
+  {
+    "event_id": {{eventId1}},
+    "quantity": 2
+  }
+}
+
+vars:post-response {
+  bookingId1: res.body.data.id
+}
+
+docs {
+  Returns 201 with status: "PENDING". Wait ~5s (PAYMENT_GATEWAY_DELAY_SECONDS)
+  before checking Get Booking 1 — the mock payment flow runs in the
+  background.
+}

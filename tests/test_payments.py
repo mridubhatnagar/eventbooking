@@ -71,6 +71,30 @@ class TestProcessWebhookEvent:
 
         assert calls == [(payment.booking_id, payment.id)]
 
+    def test_duplicate_captured_webhook_does_not_reenqueue_confirmation(
+        self, app, payment_service, fake_payment_repo, monkeypatch
+    ):
+        """A retried/duplicate webhook delivery for an already-PROCESSED
+        payment must be a no-op — not re-run the transition or re-enqueue
+        the booking confirmation task a second time."""
+        calls = []
+        monkeypatch.setattr(
+            send_booking_confirmation,
+            "delay",
+            lambda booking_id, payment_id=None: calls.append((booking_id, payment_id)),
+        )
+        payment = _seed_payment(fake_payment_repo)
+
+        with app.app_context():
+            payment_service.process_webhook_event(
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+            )
+            payment_service.process_webhook_event(
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+            )
+
+        assert calls == [(payment.booking_id, payment.id)]
+
     def test_failed_does_not_trigger_confirmation_task(
         self, app, payment_service, fake_payment_repo, monkeypatch
     ):
@@ -320,7 +344,7 @@ class TestRequestPaymentTask:
             assert jobs[0].status == JobStatus.SUCCESS
 
     def test_capture_failure_marks_job_failed_and_does_not_update_payment(
-        self, app, monkeypatch
+        self, app, monkeypatch, caplog
     ):
         from app.payments.repository import PaymentRepository
         from app.jobs.repository import JobRepository
@@ -340,8 +364,10 @@ class TestRequestPaymentTask:
                 status=PaymentStatus.PENDING,
             )
 
-            result = request_payment.apply(args=[payment.id])
+            with caplog.at_level("ERROR"):
+                result = request_payment.apply(args=[payment.id])
             assert result.failed()
+            assert f"payment {payment.id}" in caplog.text
 
             jobs = JobRepository().list(payment_id=payment.id)
             assert len(jobs) == 1

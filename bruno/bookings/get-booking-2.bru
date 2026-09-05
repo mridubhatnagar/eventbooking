@@ -1,0 +1,14 @@
+meta {
+  name: Get Booking 2 (Review Demo Event)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/bookings/{{bookingId2}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}

@@ -1,3 +1,5 @@
+from flask import current_app
+
 from app.extensions import celery
 from app.bookings.repository import BookingRepository
 from app.users.repository import UserRepository
@@ -19,6 +21,8 @@ def send_booking_confirmation(self, booking_id, payment_id=None):
 
     booking = BookingRepository().get_by_id(booking_id)
     user = UserRepository().get_by_id(booking.user_id)
-    print(f"[email] Booking confirmation sent to {user.email} for booking {booking_id}")
+    current_app.logger.info(
+        "Booking confirmation sent to %s for booking %s", user.email, booking_id
+    )
 
     job_repository.update(job.id, status=JobStatus.SUCCESS)

@@ -1,0 +1,31 @@
+meta {
+  name: Book Review Demo Event
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/bookings
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}
+
+body:json {
+  {
+    "event_id": {{eventId2}},
+    "quantity": 1
+  }
+}
+
+vars:post-response {
+  bookingId2: res.body.data.id
+}
+
+docs {
+  Must run before the review demo event's date (Events > Create Review Demo
+  Event) elapses — booking a past event is rejected with 400.
+}

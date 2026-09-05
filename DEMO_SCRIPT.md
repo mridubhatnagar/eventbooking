@@ -38,15 +38,15 @@ Placeholders to fill in as you go: `{ORGANIZER_TOKEN}`, `{CUSTOMER_TOKEN}`, `{EV
 ```
 → copy `data.access_token` as `{ORGANIZER_TOKEN}`. Authorize with it.
 
-**4. `POST /events`** — main event
+**4. `POST /events`** — main event (organizer picks a date + 12-hour time, no ISO string/timezone — IST assumed)
 ```json
-{"name": "Demo Concert", "date": "2026-12-01T18:00:00", "venue": "Main Hall", "city": "Bengaluru", "capacity": 50, "price": "25.00"}
+{"name": "Demo Concert", "event_date": "2026-12-01", "hour": 6, "minute": 0, "meridiem": "PM", "venue": "Main Hall", "city": "Bengaluru", "capacity": 50, "price": "25.00"}
 ```
 → copy `data.id` as `{EVENT_ID_1}`.
 
-**5. `POST /events`** — past event (for the review demo)
+**5. `POST /events`** — review-demo event. Past dates are rejected on create, so set `event_date`/`hour`/`minute` a few minutes ahead of when you're recording, then wait for it to pass before the review step:
 ```json
-{"name": "Demo Past Show", "date": "2025-01-01T18:00:00", "venue": "Side Stage", "city": "Bengaluru", "capacity": 50, "price": "15.00"}
+{"name": "Demo Past Show", "event_date": "<today>", "hour": <a few minutes from now>, "minute": 0, "meridiem": "AM|PM", "venue": "Side Stage", "city": "Bengaluru", "capacity": 50, "price": "15.00"}
 ```
 → copy `data.id` as `{EVENT_ID_2}`.
 

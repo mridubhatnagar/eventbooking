@@ -6,6 +6,7 @@ from app.payments.gateway_client import create_order
 from app.payments.tasks import request_payment
 from app.enums import GatewayStatus, PaymentStatus
 from app.exceptions import TaskEnqueueError
+from app.timezone import now_ist
 
 
 class BookingService:
@@ -23,6 +24,9 @@ class BookingService:
         event = self.event_repository.get_by_id(event_id)
         if not event:
             raise ValueError("event not found")
+
+        if event.date <= now_ist():
+            raise ValueError("cannot book a past event")
 
         if quantity < 1:
             raise ValueError("quantity must be at least 1")

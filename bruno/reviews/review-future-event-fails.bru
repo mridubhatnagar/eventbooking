@@ -1,0 +1,27 @@
+meta {
+  name: Review Future Event (expect 400)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/bookings/{{bookingId1}}/reviews
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}
+
+body:json {
+  {
+    "rating": 5,
+    "review_text": "Can't wait!"
+  }
+}
+
+docs {
+  Booking 1 is for the main event, dated 2026-12-01 — still in the future, so
+  this is rejected with 400. A good moment to show the rule off deliberately.
+}

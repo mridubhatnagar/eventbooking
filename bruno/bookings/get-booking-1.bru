@@ -1,0 +1,14 @@
+meta {
+  name: Get Booking 1 (Main Event)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/bookings/{{bookingId1}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{customerToken}}
+}

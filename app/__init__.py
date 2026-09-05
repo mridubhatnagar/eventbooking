@@ -1,4 +1,7 @@
+import logging
+
 from flask import Flask
+from werkzeug.exceptions import HTTPException
 
 from app.config import Config
 from app.extensions import db, jwt, migrate, configure_celery
@@ -21,6 +24,7 @@ from app.reviews.model import Review  # noqa: F401
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.logger.setLevel(logging.INFO)
 
     db.init_app(app)
     jwt.init_app(app)
@@ -45,11 +49,27 @@ def create_app():
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):
+        app.logger.error(str(e))
         return error(str(e), 503)
 
     @app.errorhandler(GatewayError)
     def handle_gateway_error(e):
+        app.logger.error(str(e))
         return error(str(e), 502)
+
+    # Single catch-all, at the app boundary only — not scattered try/excepts
+    # through services/repositories. Anything not handled by a specific
+    # handler above (or by ValueError/PermissionError/etc. in a controller)
+    # still gets the API's normal JSON envelope instead of a raw Flask/
+    # Werkzeug error page. Flask's own routing exceptions (404, 405, ...)
+    # pass through unchanged — only genuinely unexpected exceptions are
+    # mapped here.
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        if isinstance(e, HTTPException):
+            return e
+        app.logger.exception("Unhandled exception")
+        return error("internal server error", 500)
 
     @jwt.unauthorized_loader
     def handle_missing_token(reason):

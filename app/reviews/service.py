@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
-
 from app.reviews.repository import ReviewRepository
 from app.bookings.repository import BookingRepository
 from app.payments.repository import PaymentRepository
 from app.events.repository import EventRepository
 from app.enums import PaymentStatus
+from app.timezone import now_ist
 
 
 class ReviewService:
@@ -30,8 +29,7 @@ class ReviewService:
             raise ValueError("booking must be confirmed before it can be reviewed")
 
         event = self.event_repository.get_by_id(booking.event_id)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if event.date > now:
+        if event.date > now_ist():
             raise ValueError("event has not taken place yet")
 
         if self.review_repository.get_by_booking_id(booking_id):
