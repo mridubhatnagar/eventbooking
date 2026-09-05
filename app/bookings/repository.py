@@ -27,3 +27,9 @@ class BookingRepository(IDAO):
 
     def list(self, **filters):
         return Booking.query.filter_by(**filters).all()
+
+    def list_paginated(self, limit, offset, **filters):
+        query = Booking.query.filter_by(**filters)
+        total = query.count()
+        items = query.offset(offset).limit(limit).all()
+        return items, total

@@ -52,6 +52,10 @@ class _FakeRepositoryBase:
             if all(getattr(obj, k) == v for k, v in filters.items())
         ]
 
+    def list_paginated(self, limit, offset, **filters):
+        items = self.list(**filters)
+        return items[offset : offset + limit], len(items)
+
 
 class FakeUserRepository(_FakeRepositoryBase):
     model_cls = User
@@ -70,7 +74,9 @@ class FakeEventRepository(_FakeRepositoryBase):
         del self._store[id]
         return True
 
-    def list_filtered(self, city=None, date_from=None, date_to=None, user_ids=None):
+    def list_filtered(
+        self, city=None, date_from=None, date_to=None, user_ids=None, limit=20, offset=0
+    ):
         events = self._store.values()
         if city:
             events = (e for e in events if e.city == city)
@@ -80,7 +86,8 @@ class FakeEventRepository(_FakeRepositoryBase):
             events = (e for e in events if e.date <= date_to)
         if user_ids is not None:
             events = (e for e in events if e.user_id in user_ids)
-        return list(events)
+        items = list(events)
+        return items[offset : offset + limit], len(items)
 
     def try_reserve_capacity(self, event_id, quantity, commit=True):
         event = self._store.get(event_id)
@@ -113,6 +120,9 @@ class FakeOrganizerProfileRepository(_FakeRepositoryBase):
 
     def get_by_user_id(self, user_id):
         return next((p for p in self._store.values() if p.user_id == user_id), None)
+
+    def list_by_user_ids(self, user_ids):
+        return [p for p in self._store.values() if p.user_id in user_ids]
 
 
 class FakeReviewRepository(_FakeRepositoryBase):

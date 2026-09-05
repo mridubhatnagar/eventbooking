@@ -25,7 +25,9 @@ class EventRepository(IDAO):
     def list(self, **filters):
         return Event.query.filter_by(**filters).all()
 
-    def list_filtered(self, city=None, date_from=None, date_to=None, user_ids=None):
+    def list_filtered(
+        self, city=None, date_from=None, date_to=None, user_ids=None, limit=20, offset=0
+    ):
         query = Event.query
         if city:
             query = query.filter(Event.city == city)
@@ -35,7 +37,9 @@ class EventRepository(IDAO):
             query = query.filter(Event.date <= date_to)
         if user_ids is not None:
             query = query.filter(Event.user_id.in_(user_ids))
-        return query.all()
+        total = query.count()
+        items = query.offset(offset).limit(limit).all()
+        return items, total
 
     def delete_if_no_bookings(self, id):
         """Atomically deletes only if tickets_sold == 0 — collapses the

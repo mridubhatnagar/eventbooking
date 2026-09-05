@@ -74,3 +74,5 @@ class ListEventsQuery(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     industry: Industry | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)

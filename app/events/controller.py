@@ -22,8 +22,8 @@ def _serialize_organizer(profile):
     }
 
 
-def _serialize(event):
-    organizer_profile = organizer_profile_service.get_by_user_id(event.user_id)
+def _serialize(event, profiles_by_user_id):
+    organizer_profile = profiles_by_user_id.get(event.user_id)
     return {
         "id": event.id,
         "user_id": event.user_id,
@@ -41,6 +41,11 @@ def _serialize(event):
     }
 
 
+def _serialize_one(event):
+    profiles_by_user_id = organizer_profile_service.get_by_user_ids([event.user_id])
+    return _serialize(event, profiles_by_user_id)
+
+
 @bp.post("")
 @role_required(Role.ORGANIZER)
 @api.validate(json=CreateEventRequest, tags=["events"], security=JWT_SECURITY)
@@ -51,7 +56,7 @@ def create_event():
     event = event_service.create_event(
         user_id, data.name, data.date, data.venue, data.city, data.capacity, data.price
     )
-    return success(_serialize(event), 201)
+    return success(_serialize_one(event), 201)
 
 
 @bp.get("")
@@ -59,13 +64,22 @@ def create_event():
 @api.validate(query=ListEventsQuery, tags=["events"], security=JWT_SECURITY)
 def list_events():
     query = request.context.query
-    events = event_service.list_events(
+    events, total = event_service.list_events(
         city=query.city,
         date_from=query.date_from,
         date_to=query.date_to,
         industry=query.industry,
+        limit=query.limit,
+        offset=query.offset,
     )
-    return success([_serialize(e) for e in events], 200)
+    profiles_by_user_id = organizer_profile_service.get_by_user_ids(
+        {e.user_id for e in events}
+    )
+    return success(
+        [_serialize(e, profiles_by_user_id) for e in events],
+        200,
+        meta={"total": total, "limit": query.limit, "offset": query.offset},
+    )
 
 
 @bp.get("/<int:event_id>")
@@ -76,7 +90,7 @@ def get_event(event_id):
         event = event_service.get_event(event_id)
     except ValueError as e:
         return error(str(e), 404)
-    return success(_serialize(event), 200)
+    return success(_serialize_one(event), 200)
 
 
 @bp.patch("/<int:event_id>")
@@ -99,7 +113,7 @@ def update_event(event_id):
     except PermissionError as e:
         return error(str(e), 403)
 
-    return success(_serialize(event), 200)
+    return success(_serialize_one(event), 200)
 
 
 @bp.delete("/<int:event_id>")

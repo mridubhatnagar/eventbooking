@@ -29,7 +29,9 @@ class EventService:
             price=price,
         )
 
-    def list_events(self, city=None, date_from=None, date_to=None, industry=None):
+    def list_events(
+        self, city=None, date_from=None, date_to=None, industry=None, limit=20, offset=0
+    ):
         user_ids = None
         if industry:
             profiles = self.organizer_profile_repository.list(industry=industry)
@@ -42,7 +44,12 @@ class EventService:
         date_to_dt = datetime.combine(date_to, time.max) if date_to else None
 
         return self.event_repository.list_filtered(
-            city=city, date_from=date_from_dt, date_to=date_to_dt, user_ids=user_ids
+            city=city,
+            date_from=date_from_dt,
+            date_to=date_to_dt,
+            user_ids=user_ids,
+            limit=limit,
+            offset=offset,
         )
 
     def get_event(self, event_id):
