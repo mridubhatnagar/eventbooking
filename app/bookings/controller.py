@@ -3,7 +3,7 @@ from flask_jwt_extended import get_jwt_identity
 
 from app.decorators import role_required
 from app.bookings.service import BookingService
-from app.bookings.schemas import CreateBookingRequest
+from app.bookings.schemas import CreateBookingRequest, ListBookingsQuery
 from app.enums import Role
 from app.docs import api, JWT_SECURITY
 from app.responses import success, error
@@ -43,11 +43,18 @@ def create_booking():
 
 @bp.get("")
 @role_required(Role.CUSTOMER)
-@api.validate(tags=["bookings"], security=JWT_SECURITY)
+@api.validate(query=ListBookingsQuery, tags=["bookings"], security=JWT_SECURITY)
 def list_bookings():
+    query = request.context.query
     user_id = int(get_jwt_identity())
-    bookings = booking_service.list_bookings(user_id)
-    return success([_serialize(b) for b in bookings], 200)
+    bookings, total = booking_service.list_bookings(
+        user_id, limit=query.limit, offset=query.offset
+    )
+    return success(
+        [_serialize(b) for b in bookings],
+        200,
+        meta={"total": total, "limit": query.limit, "offset": query.offset},
+    )
 
 
 @bp.get("/<int:booking_id>")

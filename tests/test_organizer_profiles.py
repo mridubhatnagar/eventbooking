@@ -170,3 +170,45 @@ class TestEventOrganizerSerialization:
         assert "bank_account_number" not in organizer
         assert "gst_number" not in organizer
         assert "address" not in organizer
+
+    def test_listing_events_batches_organizer_profile_lookups(
+        self, app, client, register_and_login
+    ):
+        """Regression test: GET /events must not issue one organizer_profiles
+        query per event (N+1) — a single batched lookup for the whole page."""
+        from sqlalchemy import event as sa_event
+        from app.extensions import db
+
+        for _ in range(3):
+            _, organizer_headers = register_and_login(Role.ORGANIZER)
+            client.post(
+                "/events",
+                json={
+                    "name": "Concert",
+                    "date": "2026-01-01T18:00:00",
+                    "venue": "Hall A",
+                    "city": "Bengaluru",
+                    "capacity": 10,
+                    "price": "10.00",
+                },
+                headers=organizer_headers,
+            )
+
+        _, customer_headers = register_and_login(Role.CUSTOMER)
+
+        organizer_profile_queries = []
+
+        def _capture(conn, cursor, statement, parameters, context, executemany):
+            if "organizer_profiles" in statement:
+                organizer_profile_queries.append(statement)
+
+        with app.app_context():
+            sa_event.listen(db.engine, "before_cursor_execute", _capture)
+            try:
+                response = client.get("/events", headers=customer_headers)
+            finally:
+                sa_event.remove(db.engine, "before_cursor_execute", _capture)
+
+        assert response.status_code == 200
+        assert len(response.get_json()["data"]) >= 3
+        assert len(organizer_profile_queries) == 1

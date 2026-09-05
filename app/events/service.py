@@ -19,9 +19,11 @@ class EventService:
             price=price,
         )
 
-    def list_events(self, city=None):
+    def list_events(self, city=None, limit=20, offset=0):
         filters = {"city": city} if city else {}
-        return self.event_repository.list(**filters)
+        return self.event_repository.list_paginated(
+            limit=limit, offset=offset, **filters
+        )
 
     def get_event(self, event_id):
         event = self.event_repository.get_by_id(event_id)

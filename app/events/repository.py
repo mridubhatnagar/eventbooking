@@ -25,6 +25,12 @@ class EventRepository(IDAO):
     def list(self, **filters):
         return Event.query.filter_by(**filters).all()
 
+    def list_paginated(self, limit, offset, **filters):
+        query = Event.query.filter_by(**filters)
+        total = query.count()
+        items = query.offset(offset).limit(limit).all()
+        return items, total
+
     def try_reserve_capacity(self, event_id, quantity, commit=True):
         """Atomically increments tickets_sold if capacity allows.
 
