@@ -36,4 +36,3 @@ class Config:
     # in-process memory:// store without touching Celery's broker config.
     RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "true").lower() == "true"
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", REDIS_URL)
-    RATELIMIT_DEFAULT = ["200 per day", "50 per hour"]
