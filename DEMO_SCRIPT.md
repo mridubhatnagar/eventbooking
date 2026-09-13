@@ -6,7 +6,7 @@ Placeholders to fill in as you go: `{ORGANIZER_TOKEN}`, `{CUSTOMER_TOKEN}`, `{EV
 
 ---
 
-**1. `POST /v1/auth/register`** — organizer
+**1. `POST /v1/users`** — organizer
 ```json
 {
   "email": "organizer@demo.com",
@@ -27,12 +27,12 @@ Placeholders to fill in as you go: `{ORGANIZER_TOKEN}`, `{CUSTOMER_TOKEN}`, `{EV
 }
 ```
 
-**2. `POST /v1/auth/register`** — customer
+**2. `POST /v1/users`** — customer
 ```json
 {"email": "customer@demo.com", "phone": "1234567891", "password": "pass1234", "role": "customer"}
 ```
 
-**3. `POST /v1/auth/login`** — organizer
+**3. `POST /v1/sessions`** — organizer
 ```json
 {"email": "organizer@demo.com", "password": "pass1234"}
 ```
@@ -61,7 +61,7 @@ Placeholders to fill in as you go: `{ORGANIZER_TOKEN}`, `{CUSTOMER_TOKEN}`, `{EV
 {"company_name": "Demo Events Co, Ltd"}
 ```
 
-**8. `POST /v1/auth/login`** — customer
+**8. `POST /v1/sessions`** — customer
 ```json
 {"email": "customer@demo.com", "password": "pass1234"}
 ```

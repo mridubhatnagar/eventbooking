@@ -5,11 +5,11 @@ from app.users.schemas import RegisterRequest, LoginRequest
 from app.docs import api
 from app.responses import success, error
 
-bp = Blueprint("auth", __name__, url_prefix="/v1/auth")
+bp = Blueprint("auth", __name__, url_prefix="/v1")
 auth_service = AuthService()
 
 
-@bp.post("/register")
+@bp.post("/users")
 @api.validate(json=RegisterRequest, tags=["auth"])
 def register():
     data = request.context.json
@@ -28,7 +28,7 @@ def register():
     return success({"id": user.id, "email": user.email, "role": user.role}, 201)
 
 
-@bp.post("/login")
+@bp.post("/sessions")
 @api.validate(json=LoginRequest, tags=["auth"])
 def login():
     data = request.context.json

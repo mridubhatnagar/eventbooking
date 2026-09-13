@@ -65,12 +65,12 @@ Once running, the OpenAPI spec is auto-generated from the Pydantic schemas — n
 
 ### Endpoints
 
-All endpoints are versioned under `/v1` (added after the initial demo video was recorded — the video shows unversioned paths, e.g. `/auth/register` instead of `/v1/auth/register`; the underlying behavior is unchanged).
+All endpoints are versioned under `/v1` (added after the initial demo video was recorded — the video shows unversioned paths, e.g. `/auth/register` instead of `/v1/users`; the underlying behavior is unchanged).
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/v1/auth/register` | — | `role`: `customer` \| `organizer` |
-| POST | `/v1/auth/login` | — | returns JWT |
+| POST | `/v1/users` | — | `role`: `customer` \| `organizer` |
+| POST | `/v1/sessions` | — | returns JWT |
 | POST | `/v1/events` | JWT, organizer | create event |
 | GET | `/v1/events` | JWT | list/browse, optional `?city=`/`?date_from=`/`?date_to=`/`?industry=` filters |
 | GET | `/v1/events/:id` | JWT | event detail |

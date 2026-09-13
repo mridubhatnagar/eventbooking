@@ -73,14 +73,14 @@ class TestRegisterEndpoint:
         payload = self._payload()
         del payload["organizer_profile"]
 
-        response = client.post("/v1/auth/register", json=payload)
+        response = client.post("/v1/users", json=payload)
 
         assert response.status_code == 400
 
     def test_organizer_with_profile_returns_201_and_persists_profile(self, app, client):
         from app.organizer_profiles.repository import OrganizerProfileRepository
 
-        response = client.post("/v1/auth/register", json=self._payload())
+        response = client.post("/v1/users", json=self._payload())
 
         assert response.status_code == 201
         user_id = response.get_json()["data"]["id"]
@@ -93,7 +93,7 @@ class TestRegisterEndpoint:
 
     def test_customer_with_organizer_profile_returns_400(self, client):
         response = client.post(
-            "/v1/auth/register",
+            "/v1/users",
             json={
                 "email": "customer-http@test.com",
                 "password": "pw123456",
@@ -112,7 +112,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "gst_number": "22AAAAA0000A1Z5"},
         )
 
-        response = client.post("/v1/auth/register", json=payload)
+        response = client.post("/v1/users", json=payload)
         user_id = response.get_json()["data"]["id"]
 
         with app.app_context():
@@ -124,7 +124,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "industry": "NOT_A_REAL_INDUSTRY"}
         )
 
-        response = client.post("/v1/auth/register", json=payload)
+        response = client.post("/v1/users", json=payload)
 
         assert response.status_code == 400
 
@@ -144,7 +144,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, field: bad_value}
         )
 
-        response = client.post("/v1/auth/register", json=payload)
+        response = client.post("/v1/users", json=payload)
 
         assert response.status_code == 400
 
@@ -153,7 +153,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "gst_number": "not-a-gstin"}
         )
 
-        response = client.post("/v1/auth/register", json=payload)
+        response = client.post("/v1/users", json=payload)
 
         assert response.status_code == 400
 
@@ -165,7 +165,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "pan_number": "abcde1234f"},
         )
 
-        response = client.post("/v1/auth/register", json=payload)
+        response = client.post("/v1/users", json=payload)
         assert response.status_code == 201
         user_id = response.get_json()["data"]["id"]
 

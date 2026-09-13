@@ -1,6 +1,6 @@
 # Demo: Full API Flow via Swagger UI
 
-The full customer-facing flow — register, login, create an event, edit it, browse, book, watch the payment complete, and leave a review — can be demonstrated entirely through Swagger UI. Booking creation triggers the mocked payment flow (order creation → capture → webhook → confirmation) automatically in the background; nothing else needs to be touched by hand.
+The full customer-facing flow — register, login, create an event, edit it, browse, book, watch the payment complete, and leave a review — can be demonstrated entirely through Swagger UI. Booking creation triggers the mocked payment flow (order creation → simulated webhook → confirmation) automatically in the background; nothing else needs to be touched by hand.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ Swagger UI: `http://localhost:5000/apidoc/swagger/` (adjust the port if overridd
 
 ## Walkthrough
 
-1. `POST /v1/auth/register` — register an organizer. `organizer_profile` is required for `role: "organizer"`:
+1. `POST /v1/users` — register an organizer. `organizer_profile` is required for `role: "organizer"`:
    ```json
    {
      "email": "organizer@demo.com",
@@ -35,11 +35,11 @@ Swagger UI: `http://localhost:5000/apidoc/swagger/` (adjust the port if overridd
      }
    }
    ```
-2. `POST /v1/auth/register` again — register a customer:
+2. `POST /v1/users` again — register a customer:
    ```json
    {"email": "customer@demo.com", "phone": "1234567891", "password": "pass1234", "role": "customer"}
    ```
-3. `POST /v1/auth/login` as the organizer → copy `data.access_token` from the response.
+3. `POST /v1/sessions` as the organizer → copy `data.access_token` from the response.
 4. Click **Authorize** (lock icon, top right), paste the organizer's token, click Authorize, close the dialog.
 5. `POST /v1/events` — create the main demo event. Organizers pick a plain calendar date + a 12-hour time (`hour`/`minute`/`meridiem`) — no ISO datetime string or timezone offset, IST is assumed:
    ```json
@@ -51,7 +51,7 @@ Swagger UI: `http://localhost:5000/apidoc/swagger/` (adjust the port if overridd
    ```
 7. `PATCH /v1/events/{id}` on the main event (e.g. change the venue) — triggers the Event Update Notification task. Nothing to check in Swagger for this one; watch `docker compose logs -f worker` for the `[notification] ...` line.
 8. `PATCH /v1/organizers/me` — organizer edits their own profile (e.g. `{"company_name": "Demo Events Co, Ltd"}`). Still authorized as the organizer.
-9. `POST /v1/auth/login` as the customer → copy their token.
+9. `POST /v1/sessions` as the customer → copy their token.
 10. Click **Authorize** again, replace with the customer's token.
 11. `GET /v1/events` (optionally `?city=Bengaluru`) — browse events. Each event's response now includes an `organizer` object (`company_name`, `city`, `industry`) — note that bank/GST/PAN/address never appear here.
 12. `POST /v1/bookings` — book the main (future) event:
@@ -73,4 +73,4 @@ Swagger UI: `http://localhost:5000/apidoc/swagger/` (adjust the port if overridd
 
 ## What's not driven through Swagger
 
-The three mock Razorpay endpoints (`/mock/razorpay/orders`, `/mock/razorpay/payments/capture`, `/mock/razorpay/simulate-webhook`) live on the separate `mock-razorpay` service and are deliberately excluded from the OpenAPI docs — they aren't part of this API, they impersonate Razorpay's own servers. The real `/v1/webhooks/razorpay` receiver *is* listed in Swagger but requires a valid HMAC signature that the UI can't compute, so it isn't practical to call by hand either. Neither needs to be touched manually — steps 12–13 above trigger the whole chain automatically.
+The two mock Razorpay endpoints (`/mock/razorpay/orders`, `/mock/razorpay/simulate-webhook`) live on the separate `mock-razorpay` service and are deliberately excluded from the OpenAPI docs — they aren't part of this API, they impersonate Razorpay's own servers. The real `/v1/webhooks/razorpay` receiver *is* listed in Swagger but requires a valid HMAC signature that the UI can't compute, so it isn't practical to call by hand either. Neither needs to be touched manually — steps 12–13 above trigger the whole chain automatically.

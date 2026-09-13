@@ -93,11 +93,11 @@ def register_and_login(client):
                 "bank_ifsc_code": "TEST0001234",
                 "bank_name": "Test Bank",
             }
-        resp = client.post("/v1/auth/register", json=payload)
+        resp = client.post("/v1/users", json=payload)
         assert resp.status_code == 201, resp.get_json()
         user_id = resp.get_json()["data"]["id"]
 
-        resp = client.post("/v1/auth/login", json={"email": email, "password": password})
+        resp = client.post("/v1/sessions", json={"email": email, "password": password})
         assert resp.status_code == 200, resp.get_json()
         token = resp.get_json()["data"]["access_token"]
 
