@@ -7,6 +7,12 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-32-bytes-minimum-xxxx")
 os.environ.setdefault("RAZORPAY_WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault("MOCK_TRIGGER_API_KEY", "test-api-key")
+# register_and_login (used by most controller-level tests) hits /v1/users and
+# /v1/sessions many times per test run — rate limiting would otherwise make
+# the test suite order-dependent and flaky. memory:// avoids needing Redis
+# in the test container even if something enabled it despite the flag.
+os.environ.setdefault("RATELIMIT_ENABLED", "false")
+os.environ.setdefault("RATELIMIT_STORAGE_URI", "memory://")
 
 from tests.fakes import (
     FakeUserRepository,

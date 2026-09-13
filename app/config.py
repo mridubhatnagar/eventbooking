@@ -28,3 +28,12 @@ class Config:
     PAYMENT_GATEWAY_DELAY_SECONDS = int(
         os.environ.get("PAYMENT_GATEWAY_DELAY_SECONDS", 5)
     )
+
+    REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+    # Rate limiting (decision 29). Reuses the existing Redis instance as the
+    # counter store — separate from REDIS_URL so tests can point it at an
+    # in-process memory:// store without touching Celery's broker config.
+    RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "true").lower() == "true"
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", REDIS_URL)
+    RATELIMIT_DEFAULT = ["200 per day", "50 per hour"]

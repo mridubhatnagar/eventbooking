@@ -2,7 +2,12 @@
 
 A backend-only REST API for booking event tickets, with two roles — **Event Organizer** (manages events) and **Customer** (browses events, books tickets, pays via a mocked Razorpay flow). No frontend in scope.
 
-Full design rationale (data model, payment flow, deferred items) lives in [`PLAN.md`](PLAN.md). Architecture and coding conventions live in [`CLAUDE.md`](CLAUDE.md).
+Full design rationale (data model, payment flow, deferred items) lives in [`PLAN.md`](PLAN.md). Architecture and coding conventions live in [`CLAUDE.md`](CLAUDE.md). Individual design/judgment calls made along the way, with reasoning, live in [`decisions.md`](decisions.md).
+
+- **Live deployment**: `https://eventbooking.mridulabs.dev` — see [Deployment](#deployment) below
+- **Demo walkthrough**: [`DEMO.md`](DEMO.md) (rationale) / [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) (exact call sequence for recording)
+- **Architecture diagram + DBML schema**: [`docs/architecture/`](docs/architecture/)
+- **Runnable API collection**: [`bruno/`](bruno/) (Bruno collection, alternative to Swagger UI — see its own README for setup)
 
 ## Tech Stack
 
@@ -11,22 +16,36 @@ Full design rationale (data model, payment flow, deferred items) lives in [`PLAN
 - **Database**: PostgreSQL via SQLAlchemy
 - **Background jobs**: Celery, broker = Redis
 - **Auth**: JWT (Flask-JWT-Extended), stateless, 2-day default expiry (configurable)
+- **Rate limiting**: Flask-Limiter, backed by Redis — stricter on `/v1/sessions`/`/v1/users`, a generous default elsewhere
 - **Containerization**: Docker / docker-compose
 
 ## Architecture
 
-Layered — **Controller** (HTTP) → **Service** (business logic) → **Repository** (DB access) — organized **domain-first**: each domain (`app/users/`, `app/events/`, `app/bookings/`, `app/payments/`, `app/jobs/`) owns its own `model.py`, `dao_interface.py`, `repository.py`, `service.py`, `controller.py`.
+Layered — **Controller** (HTTP) → **Service** (business logic) → **Repository** (DB access) — organized **domain-first**: each domain (`app/users/`, `app/events/`, `app/bookings/`, `app/payments/`, `app/organizer_profiles/`, `app/reviews/`, `app/jobs/`) owns its own `model.py`, `dao_interface.py`, `repository.py`, `service.py`, `controller.py`.
 
 ```
 app/
-├── users/       registration, login, JWT issuance
-├── events/      event catalog (organizer-managed, browsable by city)
-├── bookings/    ticket booking, capacity enforcement
-├── payments/    real webhook receiver + gateway_client.py (calls the mock service below)
-└── jobs/        Celery task audit log (DB-only, no API)
+├── users/               registration, login, JWT issuance
+├── events/              event catalog (organizer-managed, browsable by city)
+├── bookings/            ticket booking, capacity enforcement
+├── payments/            real webhook receiver + gateway_client.py (calls the mock service below)
+├── organizer_profiles/  organizer company/bank/PAN details, separate from the User account
+├── reviews/             post-event reviews (only once a booking is confirmed and the event has passed)
+└── jobs/                Celery task audit log (DB-only, no API)
 ```
 
-The mock Razorpay API (`app/payments/mock_controller.py`) runs as its own service (`mock-razorpay`, entrypoint `mock_razorpay_app.py`) rather than living inside the main app. `POST /bookings` and the async payment flow make real outbound HTTP calls to it (order creation, payment capture, webhook delivery) — if it lived in the same process as the API, that self-call would deadlock a single-worker gunicorn (the one worker would be both the caller and the callee). Running it as a separate service also just mirrors reality: the real Razorpay is a separate company's servers, never the same process as your app.
+The mock Razorpay API (`app/payments/mock_controller.py`) runs as its own service (`mock-razorpay`, entrypoint `mock_razorpay_app.py`) rather than living inside the main app. `POST /v1/bookings` and the async payment flow make real outbound HTTP calls to it (order creation, webhook delivery — Razorpay auto-captures by default, so there's no separate capture call; see `decisions.md` #27) — if it lived in the same process as the API, that self-call would deadlock a single-worker gunicorn (the one worker would be both the caller and the callee). Running it as a separate service also just mirrors reality: the real Razorpay is a separate company's servers, never the same process as your app.
+
+## Deployment
+
+Live at **`https://eventbooking.mridulabs.dev`** — [Swagger UI](https://eventbooking.mridulabs.dev/apidoc/swagger/), [Flower](https://eventbooking.mridulabs.dev/flower/) (Basic Auth protected).
+
+- **Infrastructure**: a single AWS **EC2** instance (t3.micro, sized from measured Docker resource usage rather than guessed — see `decisions.md`), with an Elastic IP so the address survives stop/start.
+- **All 6 services** (`app`, `worker`, `flower`, `db`, `redis`, `mock-razorpay`) run via the **same `docker-compose.yml`** as local dev — no managed DB/cache, no orchestrator, deliberately: this is a low-traffic personal project, not a production system at scale.
+- **nginx** reverse-proxies `:80`/`:443` → `app:5000`, and `/flower/` → `flower:5555` (Flower itself never has a public port open — nginx reaches it over the instance's own loopback interface).
+- **TLS** via Let's Encrypt (`certbot`), auto-configured HTTP→HTTPS redirect.
+- **DNS** via Cloudflare (`eventbooking.mridulabs.dev` → the instance's Elastic IP).
+- **Migrations** are applied manually (`docker compose run --rm app flask --app run db upgrade`) as part of each deploy — same explicit, non-automatic step as local dev (see [Database migrations](#database-migrations) below).
 
 ## Running it
 

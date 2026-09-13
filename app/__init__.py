@@ -4,7 +4,7 @@ from flask import Flask
 from werkzeug.exceptions import HTTPException
 
 from app.config import Config
-from app.extensions import db, jwt, migrate, configure_celery
+from app.extensions import db, jwt, migrate, configure_celery, limiter
 from app.exceptions import TaskEnqueueError, GatewayError
 from app.docs import api
 from app.responses import error
@@ -29,6 +29,7 @@ def create_app():
     db.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
+    limiter.init_app(app)
     configure_celery(app)
 
     from app.users.controller import bp as users_bp

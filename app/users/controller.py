@@ -3,6 +3,7 @@ from flask import Blueprint, request
 from app.users.service import AuthService
 from app.users.schemas import RegisterRequest, LoginRequest
 from app.docs import api
+from app.extensions import limiter
 from app.responses import success, error
 
 bp = Blueprint("auth", __name__, url_prefix="/v1")
@@ -10,6 +11,7 @@ auth_service = AuthService()
 
 
 @bp.post("/users")
+@limiter.limit("10 per hour")
 @api.validate(json=RegisterRequest, tags=["auth"])
 def register():
     data = request.context.json
@@ -29,6 +31,7 @@ def register():
 
 
 @bp.post("/sessions")
+@limiter.limit("5 per minute")
 @api.validate(json=LoginRequest, tags=["auth"])
 def login():
     data = request.context.json
