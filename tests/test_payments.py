@@ -6,7 +6,7 @@ import requests
 
 from app.payments.service import PaymentService
 from app.payments.signature import compute_signature, verify_signature
-from app.payments.gateway_client import create_order, capture_payment
+from app.payments.gateway_client import create_order
 from app.bookings.tasks import send_booking_confirmation
 from app.exceptions import GatewayError, TaskEnqueueError
 from app.enums import GatewayStatus, JobStatus, PaymentStatus, WebhookEvent
@@ -36,18 +36,19 @@ class TestProcessWebhookEvent:
 
         with app.app_context():
             updated = payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED, "pay_test123"
             )
 
         assert updated.status == PaymentStatus.PROCESSED
         assert updated.gateway_status == GatewayStatus.CAPTURED
+        assert updated.gateway_payment_id == "pay_test123"
 
     def test_failed_event_marks_failed(self, app, payment_service, fake_payment_repo):
         payment = _seed_payment(fake_payment_repo)
 
         with app.app_context():
             updated = payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_FAILED
+                payment.order_id, WebhookEvent.PAYMENT_FAILED, "pay_test123"
             )
 
         assert updated.status == PaymentStatus.FAILED
@@ -66,7 +67,7 @@ class TestProcessWebhookEvent:
 
         with app.app_context():
             payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED, "pay_test123"
             )
 
         assert calls == [(payment.booking_id, payment.id)]
@@ -87,10 +88,10 @@ class TestProcessWebhookEvent:
 
         with app.app_context():
             payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED, "pay_test123"
             )
             payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED, "pay_test123"
             )
 
         assert calls == [(payment.booking_id, payment.id)]
@@ -106,7 +107,7 @@ class TestProcessWebhookEvent:
 
         with app.app_context():
             payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_FAILED
+                payment.order_id, WebhookEvent.PAYMENT_FAILED, "pay_test123"
             )
 
         assert calls == []
@@ -114,14 +115,16 @@ class TestProcessWebhookEvent:
     def test_unknown_order_id_raises(self, app, payment_service):
         with app.app_context(), pytest.raises(ValueError, match="not found"):
             payment_service.process_webhook_event(
-                "nonexistent-order", WebhookEvent.PAYMENT_CAPTURED
+                "nonexistent-order", WebhookEvent.PAYMENT_CAPTURED, "pay_test123"
             )
 
     def test_unknown_event_type_raises(self, app, payment_service, fake_payment_repo):
         payment = _seed_payment(fake_payment_repo)
 
         with app.app_context(), pytest.raises(ValueError, match="unknown event type"):
-            payment_service.process_webhook_event(payment.order_id, "payment.refunded")
+            payment_service.process_webhook_event(
+                payment.order_id, "payment.refunded", "pay_test123"
+            )
 
     def test_broker_failure_raises_task_enqueue_error(
         self, app, payment_service, fake_payment_repo, monkeypatch
@@ -135,7 +138,7 @@ class TestProcessWebhookEvent:
 
         with app.app_context(), pytest.raises(TaskEnqueueError):
             payment_service.process_webhook_event(
-                payment.order_id, WebhookEvent.PAYMENT_CAPTURED
+                payment.order_id, WebhookEvent.PAYMENT_CAPTURED, "pay_test123"
             )
 
 
@@ -213,50 +216,6 @@ class TestMockCreateOrderEndpoint:
         assert body["status"] == GatewayStatus.CREATED
 
 
-class TestMockCapturePaymentEndpoint:
-    def _auth_header(self, key_id, key_secret):
-        token = base64.b64encode(f"{key_id}:{key_secret}".encode()).decode()
-        return {"Authorization": f"Basic {token}"}
-
-    def test_missing_auth_returns_401(self, mock_app, mock_client):
-        mock_app.config["RAZORPAY_KEY_ID"] = "test_key_id"
-        mock_app.config["RAZORPAY_KEY_SECRET"] = "test_key_secret"
-
-        response = mock_client.post(
-            "/mock/razorpay/payments/capture", json={"order_id": "order-1"}
-        )
-
-        assert response.status_code == 401
-
-    def test_wrong_credentials_returns_401(self, mock_app, mock_client):
-        mock_app.config["RAZORPAY_KEY_ID"] = "test_key_id"
-        mock_app.config["RAZORPAY_KEY_SECRET"] = "test_key_secret"
-
-        response = mock_client.post(
-            "/mock/razorpay/payments/capture",
-            json={"order_id": "order-1"},
-            headers=self._auth_header("test_key_id", "wrong_secret"),
-        )
-
-        assert response.status_code == 401
-
-    def test_valid_credentials_returns_captured_payment(self, mock_app, mock_client):
-        mock_app.config["RAZORPAY_KEY_ID"] = "test_key_id"
-        mock_app.config["RAZORPAY_KEY_SECRET"] = "test_key_secret"
-
-        response = mock_client.post(
-            "/mock/razorpay/payments/capture",
-            json={"order_id": "order-1"},
-            headers=self._auth_header("test_key_id", "test_key_secret"),
-        )
-
-        assert response.status_code == 200
-        body = response.get_json()
-        assert body["id"].startswith("pay_")
-        assert body["order_id"] == "order-1"
-        assert body["status"] == GatewayStatus.CAPTURED
-
-
 class TestGatewayClient:
     def test_create_order_returns_id_on_success(self, app, monkeypatch):
         class FakeResponse:
@@ -282,40 +241,16 @@ class TestGatewayClient:
         with app.app_context(), pytest.raises(GatewayError):
             create_order(100)
 
-    def test_capture_payment_returns_id_on_success(self, app, monkeypatch):
-        class FakeResponse:
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"id": "pay_abc123"}
-
-        monkeypatch.setattr(requests, "post", lambda *a, **kw: FakeResponse())
-
-        with app.app_context():
-            assert capture_payment("order-1") == "pay_abc123"
-
-    def test_capture_payment_raises_gateway_error_on_request_failure(
-        self, app, monkeypatch
-    ):
-        def _boom(*a, **kw):
-            raise requests.ConnectionError("connection refused")
-
-        monkeypatch.setattr(requests, "post", _boom)
-
-        with app.app_context(), pytest.raises(GatewayError):
-            capture_payment("order-1")
-
 
 class TestRequestPaymentTask:
-    def test_success_captures_and_schedules_callback(self, app, monkeypatch):
+    def test_schedules_gateway_callback_without_calling_out(self, app, monkeypatch):
+        """Razorpay auto-captures by default (decision 27) — this task does
+        no gateway work itself, just schedules the delayed callback and
+        leaves Payment untouched at PENDING."""
         from app.payments.repository import PaymentRepository
         from app.jobs.repository import JobRepository
         from app.payments.tasks import request_payment, trigger_gateway_callback
 
-        monkeypatch.setattr(
-            "app.payments.tasks.capture_payment", lambda order_id: "pay_test123"
-        )
         calls = []
         monkeypatch.setattr(
             trigger_gateway_callback,
@@ -334,49 +269,15 @@ class TestRequestPaymentTask:
 
             request_payment.apply(args=[payment.id])
 
-            updated = PaymentRepository().get_by_id(payment.id)
-            assert updated.status == PaymentStatus.REQUESTED
-            assert updated.gateway_status == GatewayStatus.CAPTURED
-            assert updated.gateway_payment_id == "pay_test123"
+            unchanged = PaymentRepository().get_by_id(payment.id)
+            assert unchanged.status == PaymentStatus.PENDING
+            assert unchanged.gateway_status == GatewayStatus.CREATED
+            assert unchanged.gateway_payment_id is None
             assert calls == [(["order-xyz", WebhookEvent.PAYMENT_CAPTURED], 5)]
 
             jobs = JobRepository().list(payment_id=payment.id)
             assert len(jobs) == 1
             assert jobs[0].status == JobStatus.SUCCESS
-
-    def test_capture_failure_marks_job_failed_and_does_not_update_payment(
-        self, app, monkeypatch, caplog
-    ):
-        from app.payments.repository import PaymentRepository
-        from app.jobs.repository import JobRepository
-        from app.payments.tasks import request_payment
-
-        def _boom(order_id):
-            raise GatewayError("gateway down")
-
-        monkeypatch.setattr("app.payments.tasks.capture_payment", _boom)
-
-        with app.app_context():
-            payment = PaymentRepository().create(
-                booking_id=1,
-                amount=100,
-                order_id="order-xyz",
-                gateway_status=GatewayStatus.CREATED,
-                status=PaymentStatus.PENDING,
-            )
-
-            with caplog.at_level("ERROR"):
-                result = request_payment.apply(args=[payment.id])
-            assert result.failed()
-            assert f"payment {payment.id}" in caplog.text
-
-            jobs = JobRepository().list(payment_id=payment.id)
-            assert len(jobs) == 1
-            assert jobs[0].status == JobStatus.FAILED
-
-            unchanged = PaymentRepository().get_by_id(payment.id)
-            assert unchanged.status == PaymentStatus.PENDING
-            assert unchanged.gateway_status == GatewayStatus.CREATED
 
 
 class TestWebhookEndpoint:
@@ -399,8 +300,12 @@ class TestWebhookEndpoint:
             )
             return payment.id, payment.order_id
 
-    def _body(self, order_id, event=WebhookEvent.PAYMENT_CAPTURED):
-        return json.dumps({"order_id": order_id, "event": event.value}).encode()
+    def _body(
+        self, order_id, event=WebhookEvent.PAYMENT_CAPTURED, payment_id="pay_test123"
+    ):
+        return json.dumps(
+            {"order_id": order_id, "event": event.value, "payment_id": payment_id}
+        ).encode()
 
     def _post(self, client, body, signature=None):
         headers = {"Content-Type": "application/json"}
@@ -423,6 +328,7 @@ class TestWebhookEndpoint:
             updated = PaymentRepository().get_by_id(payment_id)
             assert updated.status == PaymentStatus.PROCESSED
             assert updated.gateway_status == GatewayStatus.CAPTURED
+            assert updated.gateway_payment_id == "pay_test123"
 
     def test_invalid_signature_returns_401(self, app, client):
         _, order_id = self._seed_payment(app, "order-http-2")
@@ -530,4 +436,6 @@ class TestSimulateWebhookEndpoint:
             captured["data"], mock_app.config["RAZORPAY_WEBHOOK_SECRET"]
         )
         assert captured["headers"]["X-Razorpay-Signature"] == expected_signature
-        assert b'"order_id":"order-1"' in captured["data"]
+        forwarded = json.loads(captured["data"])
+        assert forwarded["order_id"] == "order-1"
+        assert forwarded["payment_id"].startswith("pay_")

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 import requests
 
 from app.decorators import api_key_required
-from app.payments.schemas import WebhookRequest
+from app.payments.schemas import TriggerWebhookRequest, WebhookRequest
 from app.payments.signature import compute_signature
 from app.enums import GatewayStatus
 
@@ -67,50 +67,29 @@ def mock_create_order():
     )
 
 
-@bp.post("/mock/razorpay/payments/capture")
-def mock_capture_payment():
-    """Stands in for Razorpay's real Payment Capture API
-    (POST /v1/payments/:id/capture). Same Basic Auth scheme as
-    /mock/razorpay/orders — every real Razorpay REST endpoint uses the same
-    key_id/key_secret credentials, not just order creation."""
-    if _key_auth_failed():
-        return (
-            jsonify(
-                {
-                    "error": {
-                        "code": "BAD_REQUEST_ERROR",
-                        "description": "Authentication failed",
-                    }
-                }
-            ),
-            401,
-        )
-
-    body = request.get_json(force=True, silent=True) or {}
-    return (
-        jsonify(
-            {
-                "id": f"pay_{uuid.uuid4().hex[:14]}",
-                "order_id": body.get("order_id"),
-                "status": GatewayStatus.CAPTURED,
-            }
-        ),
-        200,
-    )
-
-
 @bp.post("/mock/razorpay/simulate-webhook")
 @api_key_required
 def simulate_webhook():
-    """Stands in for Razorpay's servers delivering a webhook. Builds a fake
-    signed event and calls the real app's webhook receiver via an actual
-    HTTP request, exercising the same code path a real integration would hit."""
+    """Stands in for Razorpay's servers auto-capturing a payment and
+    delivering the resulting webhook. Razorpay auto-captures by default (see
+    decisions.md) — there is no separate merchant-initiated capture call, so
+    this is the point where Razorpay's own payment id (pay_xxx) is minted,
+    exactly as it would be internally on Razorpay's side during checkout.
+    Builds a fake signed event carrying that id and calls the real app's
+    webhook receiver via an actual HTTP request, exercising the same code
+    path a real integration would hit."""
     try:
-        data = WebhookRequest.model_validate(request.get_json(force=True))
+        data = TriggerWebhookRequest.model_validate(request.get_json(force=True))
     except ValidationError as e:
         return jsonify({"error": e.errors()}), 400
 
-    body_bytes = data.model_dump_json().encode()
+    webhook_payload = WebhookRequest(
+        order_id=data.order_id,
+        event=data.event,
+        payment_id=f"pay_{uuid.uuid4().hex[:14]}",
+    )
+
+    body_bytes = webhook_payload.model_dump_json().encode()
     secret = current_app.config["RAZORPAY_WEBHOOK_SECRET"]
     signature = compute_signature(body_bytes, secret)
 

@@ -3,17 +3,21 @@ from flask import current_app
 
 from app.extensions import celery
 from app.payments.repository import PaymentRepository
-from app.payments.gateway_client import capture_payment
 from app.jobs.repository import JobRepository
-from app.enums import GatewayStatus, JobStatus, PaymentStatus, WebhookEvent
+from app.enums import JobStatus, WebhookEvent
 
 
 @celery.task(bind=True, name="payments.request_payment")
 def request_payment(self, payment_id):
-    """Payment Flow step 2 (frozen in PLAN.md): calls Razorpay's Payment
-    Capture API (mocked) to simulate the request reaching the gateway, then
-    sets status=REQUESTED, gateway_status=captured. Schedules the delayed
-    gateway callback trigger to simulate processing latency."""
+    """Payment Flow step 2: the entry point for the async side of a booking's
+    payment. Razorpay auto-captures by default (see decisions.md) — there is
+    no separate merchant-initiated capture call, so this task does no
+    gateway work itself. It exists as its own task (rather than having
+    bookings/service.py schedule trigger_gateway_callback directly) purely
+    to keep payments-internal scheduling details (the countdown, the event
+    type) out of the bookings domain. Payment stays PENDING until the
+    webhook arrives. Schedules the delayed gateway callback trigger to
+    simulate real-world gateway processing latency."""
     job_repository = JobRepository()
     job = job_repository.create(
         task_id=self.request.id,
@@ -22,24 +26,7 @@ def request_payment(self, payment_id):
         payment_id=payment_id,
     )
 
-    payment_repository = PaymentRepository()
-    payment = payment_repository.get_by_id(payment_id)
-
-    try:
-        gateway_payment_id = capture_payment(payment.order_id)
-    except Exception:
-        current_app.logger.exception(
-            "capture_payment failed for payment %s", payment_id
-        )
-        job_repository.update(job.id, status=JobStatus.FAILED)
-        raise
-
-    payment = payment_repository.update(
-        payment_id,
-        status=PaymentStatus.REQUESTED,
-        gateway_status=GatewayStatus.CAPTURED,
-        gateway_payment_id=gateway_payment_id,
-    )
+    payment = PaymentRepository().get_by_id(payment_id)
 
     job_repository.update(job.id, status=JobStatus.SUCCESS)
 

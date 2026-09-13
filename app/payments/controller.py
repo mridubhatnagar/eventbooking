@@ -26,7 +26,9 @@ def razorpay_webhook():
     data = request.context.json
 
     try:
-        payment_service.process_webhook_event(data.order_id, data.event)
+        payment_service.process_webhook_event(
+            data.order_id, data.event, data.payment_id
+        )
     except ValueError as e:
         return error(str(e), 400)
 

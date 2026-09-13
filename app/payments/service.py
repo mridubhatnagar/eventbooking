@@ -13,7 +13,7 @@ class PaymentService:
     def __init__(self, payment_repository=None):
         self.payment_repository = payment_repository or PaymentRepository()
 
-    def process_webhook_event(self, order_id, event_type):
+    def process_webhook_event(self, order_id, event_type, gateway_payment_id):
         payment = self.payment_repository.get_by_order_id(order_id)
         if not payment:
             raise ValueError("payment not found for this order_id")
@@ -30,7 +30,10 @@ class PaymentService:
 
         status, gateway_status = EVENT_TO_STATUS[event_type]
         payment = self.payment_repository.update(
-            payment.id, status=status, gateway_status=gateway_status
+            payment.id,
+            status=status,
+            gateway_status=gateway_status,
+            gateway_payment_id=gateway_payment_id,
         )
 
         # Payment Flow step 5 (frozen in PLAN.md): only on PROCESSED, enqueue

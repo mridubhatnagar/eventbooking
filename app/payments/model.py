@@ -13,8 +13,10 @@ class Payment(db.Model, TimestampMixin):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     order_id = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
-    # Razorpay's own payment identifier (distinct from order_id), returned by
-    # the Payment Capture API — null until capture_payment() succeeds.
+    # Razorpay's own payment identifier (distinct from order_id) — null until
+    # the webhook arrives. Razorpay auto-captures by default and mints this
+    # id itself during checkout, so it's only ever known once Razorpay tells
+    # us about it via webhook, not from any call we make ourselves.
     gateway_payment_id = db.Column(
         db.String(64), unique=True, nullable=True, index=True
     )
@@ -24,5 +26,5 @@ class Payment(db.Model, TimestampMixin):
         db.String(20), nullable=False, default=GatewayStatus.CREATED
     )
 
-    # Internal status: PENDING -> REQUESTED -> PROCESSED | FAILED
+    # Internal status: PENDING -> PROCESSED | FAILED
     status = db.Column(db.String(20), nullable=False, default=PaymentStatus.PENDING)

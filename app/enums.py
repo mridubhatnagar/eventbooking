@@ -8,7 +8,6 @@ class Role(StrEnum):
 
 class PaymentStatus(StrEnum):
     PENDING = "PENDING"
-    REQUESTED = "REQUESTED"
     PROCESSED = "PROCESSED"
     FAILED = "FAILED"
 

@@ -27,24 +27,3 @@ def create_order(amount):
         return response.json()["id"]
     except requests.RequestException as e:
         raise GatewayError(f"failed to create order with payment gateway: {e}") from e
-
-
-def capture_payment(order_id):
-    """Calls Razorpay's Payment Capture API (mocked at
-    POST /mock/razorpay/payments/capture) to capture the payment for an
-    order, authenticated the same way as create_order — every real Razorpay
-    REST endpoint (Orders, Payments, Refunds, ...) uses the same key_id/
-    key_secret Basic Auth, not just order creation."""
-    try:
-        response = requests.post(
-            f"{current_app.config['RAZORPAY_MOCK_BASE_URL']}/mock/razorpay/payments/capture",
-            json={"order_id": order_id},
-            auth=_key_auth(),
-            timeout=10,
-        )
-        response.raise_for_status()
-        return response.json()["id"]
-    except requests.RequestException as e:
-        raise GatewayError(
-            f"failed to capture payment with payment gateway: {e}"
-        ) from e
