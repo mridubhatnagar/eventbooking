@@ -26,7 +26,7 @@ def request_payment(self, payment_id):
     payment = payment_repository.get_by_id(payment_id)
 
     try:
-        capture_payment(payment.order_id)
+        gateway_payment_id = capture_payment(payment.order_id)
     except Exception:
         current_app.logger.exception(
             "capture_payment failed for payment %s", payment_id
@@ -38,6 +38,7 @@ def request_payment(self, payment_id):
         payment_id,
         status=PaymentStatus.REQUESTED,
         gateway_status=GatewayStatus.CAPTURED,
+        gateway_payment_id=gateway_payment_id,
     )
 
     job_repository.update(job.id, status=JobStatus.SUCCESS)

@@ -337,6 +337,7 @@ class TestRequestPaymentTask:
             updated = PaymentRepository().get_by_id(payment.id)
             assert updated.status == PaymentStatus.REQUESTED
             assert updated.gateway_status == GatewayStatus.CAPTURED
+            assert updated.gateway_payment_id == "pay_test123"
             assert calls == [(["order-xyz", WebhookEvent.PAYMENT_CAPTURED], 5)]
 
             jobs = JobRepository().list(payment_id=payment.id)

@@ -13,6 +13,12 @@ class Payment(db.Model, TimestampMixin):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     order_id = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
+    # Razorpay's own payment identifier (distinct from order_id), returned by
+    # the Payment Capture API — null until capture_payment() succeeds.
+    gateway_payment_id = db.Column(
+        db.String(64), unique=True, nullable=True, index=True
+    )
+
     # Mirrors Razorpay's own lifecycle: created -> captured
     gateway_status = db.Column(
         db.String(20), nullable=False, default=GatewayStatus.CREATED
