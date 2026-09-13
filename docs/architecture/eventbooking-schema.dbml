@@ -1,0 +1,158 @@
+// EventBooking — Data Model
+// Paste into https://dbdiagram.io to render an ERD.
+//
+// Note: role/status/gateway_status columns are plain VARCHAR in Postgres
+// (enforced as enums at the app layer via Python StrEnum, see app/enums.py),
+// modeled here as `enum` purely for readability in the diagram.
+
+Enum role {
+  customer
+  organizer
+}
+
+Enum industry {
+  MUSIC
+  SPORTS
+  CORPORATE
+  COMEDY
+  THEATRE_ARTS
+  CONFERENCES_SEMINARS
+  EDUCATION
+  FOOD_BEVERAGE
+  TECHNOLOGY
+  FASHION
+  FILM_ENTERTAINMENT
+  COMMUNITY_NONPROFIT
+  OTHER
+}
+
+Enum payment_status {
+  PENDING
+  REQUESTED
+  PROCESSED
+  FAILED
+}
+
+Enum gateway_status {
+  created
+  captured
+  failed
+}
+
+Enum job_status {
+  STARTED
+  SUCCESS
+  FAILED
+}
+
+Table users {
+  id integer [pk, increment]
+  email varchar(255) [not null, unique]
+  phone varchar(20)
+  password_hash varchar(255) [not null]
+  role role [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table organizer_profiles {
+  id integer [pk, increment]
+  user_id integer [not null, unique]
+  company_name varchar(255) [not null]
+  city varchar(255) [not null]
+  address varchar(500) [not null]
+  industry industry [not null]
+  gst_number varchar(20) [note: 'optional']
+  pan_number varchar(20) [not null]
+  bank_account_holder_name varchar(255) [not null]
+  bank_account_number varchar(34) [not null]
+  bank_ifsc_code varchar(11) [not null]
+  bank_name varchar(255) [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  Note: 'Sensitive fields (bank/PAN/GST/address) never exposed on customer-facing responses — only company_name, city, industry.'
+}
+
+Table events {
+  id integer [pk, increment]
+  user_id integer [not null, note: 'organizer who created it']
+  name varchar(255) [not null]
+  date timestamp [not null]
+  venue varchar(255) [not null]
+  city varchar(255) [not null]
+  capacity integer [not null]
+  tickets_sold integer [not null, default: 0]
+  price decimal(10,2) [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    user_id
+    date
+    city
+  }
+
+  Note: 'capacity_remaining = capacity - tickets_sold (computed, not stored). Deletable only when tickets_sold = 0.'
+}
+
+Table bookings {
+  id integer [pk, increment]
+  user_id integer [not null]
+  event_id integer [not null]
+  quantity integer [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    user_id
+    event_id
+  }
+
+  Note: 'No status column — derived from payments.status (single source of truth). One row per booking; the same event can be booked twice by the same user as two separate bookings.'
+}
+
+Table payments {
+  id integer [pk, increment]
+  booking_id integer [not null, unique, note: '1:1 with bookings']
+  amount decimal(10,2) [not null]
+  order_id varchar(64) [unique, note: 'gateway-issued, correlates inbound webhook to this row']
+  gateway_payment_id varchar(64) [unique, note: "Razorpay's own payment id (pay_xxx), distinct from order_id — set once capture_payment() succeeds"]
+  gateway_status gateway_status [not null, default: 'created']
+  status payment_status [not null, default: 'PENDING']
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table reviews {
+  id integer [pk, increment]
+  booking_id integer [not null, unique, note: '1:1 with bookings — one review per booking, not per user/event']
+  rating integer [not null]
+  review_text text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  Note: 'Only allowed once the booking is CONFIRMED and the event date has passed.'
+}
+
+Table jobs {
+  id integer [pk, increment]
+  task_id varchar(64) [not null, note: "Celery's UUID"]
+  task_name varchar(128) [not null]
+  status job_status [not null]
+  event_id integer [note: 'nullable, plain FK — many rows can reference the same event']
+  payment_id integer [note: 'nullable, plain FK — many rows can reference the same payment']
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  Note: 'Generic audit log of every Celery task run. DB-queryable only — never exposed via an API endpoint.'
+}
+
+Ref: organizer_profiles.user_id - users.id
+Ref: events.user_id > users.id
+Ref: bookings.user_id > users.id
+Ref: bookings.event_id > events.id
+Ref: payments.booking_id - bookings.id
+Ref: reviews.booking_id - bookings.id
+Ref: jobs.event_id > events.id
+Ref: jobs.payment_id > payments.id
