@@ -5,7 +5,7 @@ import pytest
 
 from app.events.service import EventService, EventHasBookingsError
 from app.events.tasks import notify_event_update
-from app.enums import JobStatus, Role
+from app.enums import GatewayStatus, JobStatus, PaymentStatus, Role
 
 FUTURE_DATE = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=365)
 
@@ -597,10 +597,16 @@ class TestNotifyEventUpdateTask:
     PLAN.md) — proves it notifies every booked customer, not just that it
     was enqueued."""
 
-    def test_notifies_each_booked_customer_and_records_success_job(self, app, caplog):
+    def test_notifies_only_confirmed_bookings_and_records_success_job(
+        self, app, caplog
+    ):
+        """PENDING is still undetermined — the payment could resolve to
+        FAILED — so only customers with a CONFIRMED booking (payment
+        PROCESSED) should be notified."""
         from app.users.repository import UserRepository
         from app.events.repository import EventRepository
         from app.bookings.repository import BookingRepository
+        from app.payments.repository import PaymentRepository
         from app.jobs.repository import JobRepository
 
         with app.app_context():
@@ -620,24 +626,37 @@ class TestNotifyEventUpdateTask:
                 tickets_sold=0,
                 price=Decimal("10.00"),
             )
-            customer_a = UserRepository().create(
-                email="a@test.com", phone=None, password_hash="x", role=Role.CUSTOMER
+            customer_confirmed = UserRepository().create(
+                email="confirmed@test.com",
+                phone=None,
+                password_hash="x",
+                role=Role.CUSTOMER,
             )
-            customer_b = UserRepository().create(
-                email="b@test.com", phone=None, password_hash="x", role=Role.CUSTOMER
+            customer_pending = UserRepository().create(
+                email="pending@test.com",
+                phone=None,
+                password_hash="x",
+                role=Role.CUSTOMER,
+            )
+            confirmed_booking = BookingRepository().create(
+                user_id=customer_confirmed.id, event_id=event.id, quantity=1
             )
             BookingRepository().create(
-                user_id=customer_a.id, event_id=event.id, quantity=1
+                user_id=customer_pending.id, event_id=event.id, quantity=2
             )
-            BookingRepository().create(
-                user_id=customer_b.id, event_id=event.id, quantity=2
+            PaymentRepository().create(
+                booking_id=confirmed_booking.id,
+                amount=Decimal("10.00"),
+                order_id="order-confirmed-1",
+                gateway_status=GatewayStatus.CAPTURED,
+                status=PaymentStatus.PROCESSED,
             )
 
             with caplog.at_level("INFO"):
                 notify_event_update.apply(args=[event.id])
 
-            assert customer_a.email in caplog.text
-            assert customer_b.email in caplog.text
+            assert customer_confirmed.email in caplog.text
+            assert customer_pending.email not in caplog.text
 
             jobs = JobRepository().list(event_id=event.id)
             assert len(jobs) == 1
