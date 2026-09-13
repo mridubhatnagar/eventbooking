@@ -5,7 +5,7 @@ from app.users.schemas import RegisterRequest, LoginRequest
 from app.docs import api
 from app.responses import success, error
 
-bp = Blueprint("auth", __name__, url_prefix="/auth")
+bp = Blueprint("auth", __name__, url_prefix="/v1/auth")
 auth_service = AuthService()
 
 

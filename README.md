@@ -65,23 +65,28 @@ Once running, the OpenAPI spec is auto-generated from the Pydantic schemas — n
 
 ### Endpoints
 
+All endpoints are versioned under `/v1` (added after the initial demo video was recorded — the video shows unversioned paths, e.g. `/auth/register` instead of `/v1/auth/register`; the underlying behavior is unchanged).
+
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/auth/register` | — | `role`: `customer` \| `organizer` |
-| POST | `/auth/login` | — | returns JWT |
-| POST | `/events` | JWT, organizer | create event |
-| GET | `/events` | JWT | list/browse, optional `?city=` filter |
-| GET | `/events/:id` | JWT | event detail |
-| PATCH | `/events/:id` | JWT, organizer (own events) | triggers event-update notification |
-| POST | `/bookings` | JWT, customer | checks capacity, kicks off payment flow |
-| GET | `/bookings` | JWT, customer | own bookings |
-| GET | `/bookings/:id` | JWT, customer | own booking detail |
-| POST | `/webhooks/razorpay` | HMAC signature | real webhook receiver |
+| POST | `/v1/auth/register` | — | `role`: `customer` \| `organizer` |
+| POST | `/v1/auth/login` | — | returns JWT |
+| POST | `/v1/events` | JWT, organizer | create event |
+| GET | `/v1/events` | JWT | list/browse, optional `?city=`/`?date_from=`/`?date_to=`/`?industry=` filters |
+| GET | `/v1/events/:id` | JWT | event detail |
+| PATCH | `/v1/events/:id` | JWT, organizer (own events) | triggers event-update notification |
+| DELETE | `/v1/events/:id` | JWT, organizer (own events) | only if the event has zero bookings |
+| PATCH | `/v1/organizers/me` | JWT, organizer | update own organizer profile |
+| POST | `/v1/bookings` | JWT, customer | checks capacity, kicks off payment flow |
+| GET | `/v1/bookings` | JWT, customer | own bookings |
+| GET | `/v1/bookings/:id` | JWT, customer | own booking detail |
+| POST | `/v1/bookings/:id/reviews` | JWT, customer | only once the booking is confirmed and the event has passed |
+| GET | `/v1/events/:id/reviews` | JWT | reviews for an event |
+| POST | `/v1/webhooks/razorpay` | HMAC signature | real webhook receiver |
 
-Three more endpoints exist as throwaway stand-ins for Razorpay's own servers, deliberately excluded from the docs above since they aren't part of this API — they run on the separate `mock-razorpay` service, not `app`:
-- `POST /mock/razorpay/orders` (HTTP Basic Auth via `RAZORPAY_KEY_ID`/`KEY_SECRET`) — mocks Razorpay's real Orders API, called by `POST /bookings` to get an `order_id` before creating the booking's payment record
-- `POST /mock/razorpay/payments/capture` (same Basic Auth) — mocks Razorpay's Payment Capture API, called by the async payment flow
-- `POST /mock/razorpay/simulate-webhook` (`x-api-key` protected) — mocks Razorpay delivering a webhook back to `app`'s real `/webhooks/razorpay`
+Two more endpoints exist as throwaway stand-ins for Razorpay's own servers, deliberately excluded from the docs above (and **not versioned** — they mimic Razorpay's own URL shape, not this API's) since they aren't part of this API — they run on the separate `mock-razorpay` service, not `app`:
+- `POST /mock/razorpay/orders` (HTTP Basic Auth via `RAZORPAY_KEY_ID`/`KEY_SECRET`) — mocks Razorpay's real Orders API, called by `POST /v1/bookings` to get an `order_id` before creating the booking's payment record
+- `POST /mock/razorpay/simulate-webhook` (`x-api-key` protected) — mocks Razorpay auto-capturing a payment and delivering the resulting webhook back to `app`'s real `/v1/webhooks/razorpay`
 
 ## Testing
 

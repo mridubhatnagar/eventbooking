@@ -8,7 +8,7 @@ from app.enums import Role
 from app.docs import api, JWT_SECURITY
 from app.responses import success, error
 
-bp = Blueprint("organizer_profiles", __name__, url_prefix="/organizers")
+bp = Blueprint("organizer_profiles", __name__, url_prefix="/v1/organizers")
 organizer_profile_service = OrganizerProfileService()
 
 

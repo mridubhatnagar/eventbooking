@@ -73,14 +73,14 @@ class TestRegisterEndpoint:
         payload = self._payload()
         del payload["organizer_profile"]
 
-        response = client.post("/auth/register", json=payload)
+        response = client.post("/v1/auth/register", json=payload)
 
         assert response.status_code == 400
 
     def test_organizer_with_profile_returns_201_and_persists_profile(self, app, client):
         from app.organizer_profiles.repository import OrganizerProfileRepository
 
-        response = client.post("/auth/register", json=self._payload())
+        response = client.post("/v1/auth/register", json=self._payload())
 
         assert response.status_code == 201
         user_id = response.get_json()["data"]["id"]
@@ -93,7 +93,7 @@ class TestRegisterEndpoint:
 
     def test_customer_with_organizer_profile_returns_400(self, client):
         response = client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": "customer-http@test.com",
                 "password": "pw123456",
@@ -112,7 +112,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "gst_number": "22AAAAA0000A1Z5"},
         )
 
-        response = client.post("/auth/register", json=payload)
+        response = client.post("/v1/auth/register", json=payload)
         user_id = response.get_json()["data"]["id"]
 
         with app.app_context():
@@ -124,7 +124,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "industry": "NOT_A_REAL_INDUSTRY"}
         )
 
-        response = client.post("/auth/register", json=payload)
+        response = client.post("/v1/auth/register", json=payload)
 
         assert response.status_code == 400
 
@@ -144,7 +144,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, field: bad_value}
         )
 
-        response = client.post("/auth/register", json=payload)
+        response = client.post("/v1/auth/register", json=payload)
 
         assert response.status_code == 400
 
@@ -153,7 +153,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "gst_number": "not-a-gstin"}
         )
 
-        response = client.post("/auth/register", json=payload)
+        response = client.post("/v1/auth/register", json=payload)
 
         assert response.status_code == 400
 
@@ -165,7 +165,7 @@ class TestRegisterEndpoint:
             organizer_profile={**ORGANIZER_PROFILE, "pan_number": "abcde1234f"},
         )
 
-        response = client.post("/auth/register", json=payload)
+        response = client.post("/v1/auth/register", json=payload)
         assert response.status_code == 201
         user_id = response.get_json()["data"]["id"]
 
@@ -176,7 +176,7 @@ class TestRegisterEndpoint:
 
 class TestUpdateProfileEndpoint:
     def test_missing_jwt_returns_401(self, client):
-        response = client.patch("/organizers/me", json={"company_name": "New Co"})
+        response = client.patch("/v1/organizers/me", json={"company_name": "New Co"})
 
         assert response.status_code == 401
 
@@ -184,7 +184,7 @@ class TestUpdateProfileEndpoint:
         _, headers = register_and_login(Role.CUSTOMER)
 
         response = client.patch(
-            "/organizers/me", json={"company_name": "New Co"}, headers=headers
+            "/v1/organizers/me", json={"company_name": "New Co"}, headers=headers
         )
 
         assert response.status_code == 403
@@ -193,7 +193,7 @@ class TestUpdateProfileEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.patch(
-            "/organizers/me", json={"company_name": "Updated Co"}, headers=headers
+            "/v1/organizers/me", json={"company_name": "Updated Co"}, headers=headers
         )
 
         assert response.status_code == 200
@@ -203,7 +203,7 @@ class TestUpdateProfileEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.patch(
-            "/organizers/me", json={"pan_number": "not-a-pan"}, headers=headers
+            "/v1/organizers/me", json={"pan_number": "not-a-pan"}, headers=headers
         )
 
         assert response.status_code == 400
@@ -215,7 +215,7 @@ class TestEventOrganizerSerialization:
     ):
         _, organizer_headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events",
+            "/v1/events",
             json={
                 "name": "Concert",
                 "venue": "Hall A",
@@ -228,7 +228,7 @@ class TestEventOrganizerSerialization:
         ).get_json()["data"]
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
-        response = client.get(f"/events/{created['id']}", headers=customer_headers)
+        response = client.get(f"/v1/events/{created['id']}", headers=customer_headers)
 
         organizer = response.get_json()["data"]["organizer"]
         assert organizer["company_name"] == ORGANIZER_PROFILE["company_name"]
@@ -251,7 +251,7 @@ class TestEventOrganizerSerialization:
         for _ in range(3):
             _, organizer_headers = register_and_login(Role.ORGANIZER)
             client.post(
-                "/events",
+                "/v1/events",
                 json={
                     "name": "Concert",
                     "venue": "Hall A",
@@ -274,7 +274,7 @@ class TestEventOrganizerSerialization:
         with app.app_context():
             sa_event.listen(db.engine, "before_cursor_execute", _capture)
             try:
-                response = client.get("/events", headers=customer_headers)
+                response = client.get("/v1/events", headers=customer_headers)
             finally:
                 sa_event.remove(db.engine, "before_cursor_execute", _capture)
 

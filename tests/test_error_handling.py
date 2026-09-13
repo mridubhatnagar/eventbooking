@@ -15,7 +15,7 @@ class TestUnexpectedErrorHandler:
             lambda self, event_id: (_ for _ in ()).throw(RuntimeError("boom")),
         )
 
-        response = client.get("/events/1", headers=headers)
+        response = client.get("/v1/events/1", headers=headers)
 
         assert response.status_code == 500
         body = response.get_json()

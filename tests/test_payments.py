@@ -282,7 +282,7 @@ class TestRequestPaymentTask:
 
 class TestWebhookEndpoint:
     """HTTP-layer for the real receiver: signature verification and status
-    mapping, exercised as one actual request through /webhooks/razorpay."""
+    mapping, exercised as one actual request through /v1/webhooks/razorpay."""
 
     def _seed_payment(self, app, order_id):
         """Returns (id, order_id) as plain values, not the ORM instance —
@@ -311,7 +311,7 @@ class TestWebhookEndpoint:
         headers = {"Content-Type": "application/json"}
         if signature is not None:
             headers["X-Razorpay-Signature"] = signature
-        return client.post("/webhooks/razorpay", data=body, headers=headers)
+        return client.post("/v1/webhooks/razorpay", data=body, headers=headers)
 
     def test_valid_signature_updates_payment(self, app, client, monkeypatch):
         from app.payments.repository import PaymentRepository
@@ -431,7 +431,9 @@ class TestSimulateWebhookEndpoint:
 
         assert response.status_code == 200
         assert response.get_json()["webhook_status"] == 200
-        assert captured["url"] == f"{mock_app.config['WEB_BASE_URL']}/webhooks/razorpay"
+        assert (
+            captured["url"] == f"{mock_app.config['WEB_BASE_URL']}/v1/webhooks/razorpay"
+        )
         expected_signature = compute_signature(
             captured["data"], mock_app.config["RAZORPAY_WEBHOOK_SECRET"]
         )

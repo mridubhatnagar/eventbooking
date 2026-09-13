@@ -5,13 +5,31 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/events
+  url: {{baseUrl}}/v1/events
   body: json
   auth: bearer
 }
 
 auth:bearer {
   token: {{organizerToken}}
+}
+
+body:json {
+  {
+    "name": "Review Demo Show",
+    "event_date": "2026-09-23",
+    "hour": "9",
+    "minute": "00",
+    "meridiem": "AM",
+    "venue": "Side Stage",
+    "city": "Bengaluru",
+    "capacity": 50,
+    "price": "505.00"
+  }
+}
+
+vars:post-response {
+  eventId2: res.body.data.id
 }
 
 script:pre-request {
@@ -25,29 +43,11 @@ script:pre-request {
   const hour24 = istNow.getUTCHours();
   let hour12 = hour24 % 12;
   if (hour12 === 0) hour12 = 12;
-
+  
   bru.setVar("eventTwoDate", istNow.toISOString().slice(0, 10));
   bru.setVar("eventTwoHour", hour12);
   bru.setVar("eventTwoMinute", istNow.getUTCMinutes());
   bru.setVar("eventTwoMeridiem", hour24 < 12 ? "AM" : "PM");
-}
-
-body:json {
-  {
-    "name": "Review Demo Show",
-    "event_date": "{{eventTwoDate}}",
-    "hour": {{eventTwoHour}},
-    "minute": {{eventTwoMinute}},
-    "meridiem": "{{eventTwoMeridiem}}",
-    "venue": "Side Stage",
-    "city": "Bengaluru",
-    "capacity": 50,
-    "price": "15.00"
-  }
-}
-
-vars:post-response {
-  eventId2: res.body.data.id
 }
 
 docs {

@@ -6,7 +6,7 @@ from app.payments.signature import verify_signature
 from app.docs import api
 from app.responses import success, error
 
-bp = Blueprint("payments", __name__)
+bp = Blueprint("payments", __name__, url_prefix="/v1")
 payment_service = PaymentService()
 
 

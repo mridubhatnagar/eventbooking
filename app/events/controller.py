@@ -9,7 +9,7 @@ from app.enums import Role
 from app.docs import api, JWT_SECURITY
 from app.responses import success, error
 
-bp = Blueprint("events", __name__, url_prefix="/events")
+bp = Blueprint("events", __name__, url_prefix="/v1/events")
 event_service = EventService()
 organizer_profile_service = OrganizerProfileService()
 

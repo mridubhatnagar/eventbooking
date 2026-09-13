@@ -179,7 +179,7 @@ def _setup_confirmed_past_booking(app, customer_id, organizer_id=1, date=PAST_DA
 
 class TestCreateReviewEndpoint:
     def test_missing_jwt_returns_401(self, client):
-        response = client.post("/bookings/1/reviews", json={"rating": 5})
+        response = client.post("/v1/bookings/1/reviews", json={"rating": 5})
 
         assert response.status_code == 401
 
@@ -187,7 +187,7 @@ class TestCreateReviewEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.post(
-            "/bookings/1/reviews", json={"rating": 5}, headers=headers
+            "/v1/bookings/1/reviews", json={"rating": 5}, headers=headers
         )
 
         assert response.status_code == 403
@@ -199,7 +199,7 @@ class TestCreateReviewEndpoint:
         _, booking_id = _setup_confirmed_past_booking(app, customer_id)
 
         response = client.post(
-            f"/bookings/{booking_id}/reviews",
+            f"/v1/bookings/{booking_id}/reviews",
             json={"rating": 5, "review_text": "Great show"},
             headers=headers,
         )
@@ -215,7 +215,7 @@ class TestCreateReviewEndpoint:
 
         _, other_headers = register_and_login(Role.CUSTOMER)
         response = client.post(
-            f"/bookings/{booking_id}/reviews", json={"rating": 5}, headers=other_headers
+            f"/v1/bookings/{booking_id}/reviews", json={"rating": 5}, headers=other_headers
         )
 
         assert response.status_code == 404
@@ -242,7 +242,7 @@ class TestCreateReviewEndpoint:
             booking_id = booking.id
 
         response = client.post(
-            f"/bookings/{booking_id}/reviews", json={"rating": 5}, headers=headers
+            f"/v1/bookings/{booking_id}/reviews", json={"rating": 5}, headers=headers
         )
 
         assert response.status_code == 400
@@ -254,7 +254,7 @@ class TestCreateReviewEndpoint:
         )
 
         response = client.post(
-            f"/bookings/{booking_id}/reviews", json={"rating": 5}, headers=headers
+            f"/v1/bookings/{booking_id}/reviews", json={"rating": 5}, headers=headers
         )
 
         assert response.status_code == 400
@@ -264,12 +264,12 @@ class TestCreateReviewEndpoint:
         _, booking_id = _setup_confirmed_past_booking(app, customer_id)
 
         first = client.post(
-            f"/bookings/{booking_id}/reviews", json={"rating": 5}, headers=headers
+            f"/v1/bookings/{booking_id}/reviews", json={"rating": 5}, headers=headers
         )
         assert first.status_code == 201
 
         second = client.post(
-            f"/bookings/{booking_id}/reviews", json={"rating": 3}, headers=headers
+            f"/v1/bookings/{booking_id}/reviews", json={"rating": 3}, headers=headers
         )
         assert second.status_code == 400
 
@@ -281,7 +281,7 @@ class TestCreateReviewEndpoint:
         _, booking_id = _setup_confirmed_past_booking(app, customer_id)
 
         response = client.post(
-            f"/bookings/{booking_id}/reviews", json={"rating": rating}, headers=headers
+            f"/v1/bookings/{booking_id}/reviews", json={"rating": rating}, headers=headers
         )
 
         assert response.status_code == 400
@@ -289,14 +289,14 @@ class TestCreateReviewEndpoint:
 
 class TestListEventReviewsEndpoint:
     def test_missing_jwt_returns_401(self, client):
-        response = client.get("/events/1/reviews")
+        response = client.get("/v1/events/1/reviews")
 
         assert response.status_code == 401
 
     def test_nonexistent_event_returns_404(self, client, register_and_login):
         _, headers = register_and_login(Role.CUSTOMER)
 
-        response = client.get("/events/999999/reviews", headers=headers)
+        response = client.get("/v1/events/999999/reviews", headers=headers)
 
         assert response.status_code == 404
 
@@ -306,13 +306,13 @@ class TestListEventReviewsEndpoint:
         customer_id, customer_headers = register_and_login(Role.CUSTOMER)
         event_id, booking_id = _setup_confirmed_past_booking(app, customer_id)
         client.post(
-            f"/bookings/{booking_id}/reviews",
+            f"/v1/bookings/{booking_id}/reviews",
             json={"rating": 4, "review_text": "Nice"},
             headers=customer_headers,
         )
 
         _, organizer_headers = register_and_login(Role.ORGANIZER)
-        response = client.get(f"/events/{event_id}/reviews", headers=organizer_headers)
+        response = client.get(f"/v1/events/{event_id}/reviews", headers=organizer_headers)
 
         assert response.status_code == 200
         reviews = response.get_json()["data"]

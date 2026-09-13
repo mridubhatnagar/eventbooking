@@ -9,7 +9,7 @@ from app.enums import Role
 from app.docs import api, JWT_SECURITY
 from app.responses import success, error
 
-bp = Blueprint("reviews", __name__)
+bp = Blueprint("reviews", __name__, url_prefix="/v1")
 review_service = ReviewService()
 event_service = EventService()
 

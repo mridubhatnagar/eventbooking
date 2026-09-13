@@ -94,7 +94,7 @@ def simulate_webhook():
     signature = compute_signature(body_bytes, secret)
 
     response = requests.post(
-        f"{current_app.config['WEB_BASE_URL']}/webhooks/razorpay",
+        f"{current_app.config['WEB_BASE_URL']}/v1/webhooks/razorpay",
         data=body_bytes,
         headers={
             "Content-Type": "application/json",

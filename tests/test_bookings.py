@@ -191,7 +191,7 @@ def _time_fields(dt):
 
 def _create_event_http(client, organizer_headers, capacity=10):
     response = client.post(
-        "/events",
+        "/v1/events",
         json={
             "name": "Concert",
             "venue": "Hall A",
@@ -210,7 +210,7 @@ class TestCreateBookingEndpoint:
     """HTTP-layer: JWT enforcement, RBAC, request validation."""
 
     def test_missing_jwt_returns_401(self, client):
-        response = client.post("/bookings", json={"event_id": 1, "quantity": 1})
+        response = client.post("/v1/bookings", json={"event_id": 1, "quantity": 1})
 
         assert response.status_code == 401
 
@@ -218,7 +218,7 @@ class TestCreateBookingEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.post(
-            "/bookings", json={"event_id": 1, "quantity": 1}, headers=headers
+            "/v1/bookings", json={"event_id": 1, "quantity": 1}, headers=headers
         )
 
         assert response.status_code == 403
@@ -227,7 +227,7 @@ class TestCreateBookingEndpoint:
         _, headers = register_and_login(Role.CUSTOMER)
 
         response = client.post(
-            "/bookings", json={"event_id": 1, "quantity": 0}, headers=headers
+            "/v1/bookings", json={"event_id": 1, "quantity": 0}, headers=headers
         )
 
         assert response.status_code == 400
@@ -251,7 +251,7 @@ class TestCreateBookingEndpoint:
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
         response = client.post(
-            "/bookings",
+            "/v1/bookings",
             json={"event_id": past_event_id, "quantity": 1},
             headers=customer_headers,
         )
@@ -278,7 +278,7 @@ class TestBookingErrorMapping:
 
         with caplog.at_level("ERROR"):
             response = client.post(
-                "/bookings",
+                "/v1/bookings",
                 json={"event_id": event["id"], "quantity": 1},
                 headers=customer_headers,
             )
@@ -304,7 +304,7 @@ class TestBookingErrorMapping:
 
         with caplog.at_level("ERROR"):
             response = client.post(
-                "/bookings",
+                "/v1/bookings",
                 json={"event_id": event["id"], "quantity": 1},
                 headers=customer_headers,
             )
@@ -320,7 +320,7 @@ class TestGetBookingEndpoint:
         )
         monkeypatch.setattr(request_payment, "delay", lambda *a, **kw: None)
         response = client.post(
-            "/bookings",
+            "/v1/bookings",
             json={"event_id": event_id, "quantity": quantity},
             headers=customer_headers,
         )
@@ -333,7 +333,7 @@ class TestGetBookingEndpoint:
         _, customer_headers = register_and_login(Role.CUSTOMER)
         booking = self._book(client, customer_headers, event["id"], monkeypatch)
 
-        response = client.get(f"/bookings/{booking['id']}", headers=customer_headers)
+        response = client.get(f"/v1/bookings/{booking['id']}", headers=customer_headers)
 
         assert response.status_code == 200
         assert response.get_json()["data"]["id"] == booking["id"]
@@ -345,14 +345,14 @@ class TestGetBookingEndpoint:
         booking = self._book(client, owner_headers, event["id"], monkeypatch)
 
         _, other_headers = register_and_login(Role.CUSTOMER)
-        response = client.get(f"/bookings/{booking['id']}", headers=other_headers)
+        response = client.get(f"/v1/bookings/{booking['id']}", headers=other_headers)
 
         assert response.status_code == 404
 
     def test_nonexistent_booking_returns_404(self, client, register_and_login):
         _, headers = register_and_login(Role.CUSTOMER)
 
-        response = client.get("/bookings/999999", headers=headers)
+        response = client.get("/v1/bookings/999999", headers=headers)
 
         assert response.status_code == 404
 
@@ -372,19 +372,19 @@ class TestListBookingsEndpoint:
 
         _, mine_headers = register_and_login(Role.CUSTOMER)
         client.post(
-            "/bookings",
+            "/v1/bookings",
             json={"event_id": event["id"], "quantity": 1},
             headers=mine_headers,
         )
 
         _, other_headers = register_and_login(Role.CUSTOMER)
         client.post(
-            "/bookings",
+            "/v1/bookings",
             json={"event_id": event["id"], "quantity": 2},
             headers=other_headers,
         )
 
-        response = client.get("/bookings", headers=mine_headers)
+        response = client.get("/v1/bookings", headers=mine_headers)
 
         assert response.status_code == 200
         bookings = response.get_json()["data"]
@@ -404,12 +404,12 @@ class TestListBookingsEndpoint:
         _, headers = register_and_login(Role.CUSTOMER)
         for _ in range(3):
             client.post(
-                "/bookings",
+                "/v1/bookings",
                 json={"event_id": event["id"], "quantity": 1},
                 headers=headers,
             )
 
-        response = client.get("/bookings?limit=2&offset=1", headers=headers)
+        response = client.get("/v1/bookings?limit=2&offset=1", headers=headers)
         body = response.get_json()
 
         assert response.status_code == 200

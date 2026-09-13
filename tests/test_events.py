@@ -217,13 +217,13 @@ class TestCreateEventEndpoint:
     """HTTP-layer: JWT enforcement, RBAC, request validation."""
 
     def test_missing_jwt_returns_401(self, client):
-        response = client.post("/events", json=_valid_event_payload())
+        response = client.post("/v1/events", json=_valid_event_payload())
 
         assert response.status_code == 401
 
     def test_invalid_jwt_returns_422(self, client):
         response = client.post(
-            "/events",
+            "/v1/events",
             json=_valid_event_payload(),
             headers={"Authorization": "Bearer not-a-real-token"},
         )
@@ -233,14 +233,14 @@ class TestCreateEventEndpoint:
     def test_customer_role_forbidden(self, client, register_and_login):
         _, headers = register_and_login(Role.CUSTOMER)
 
-        response = client.post("/events", json=_valid_event_payload(), headers=headers)
+        response = client.post("/v1/events", json=_valid_event_payload(), headers=headers)
 
         assert response.status_code == 403
 
     def test_organizer_can_create_event(self, client, register_and_login):
         _, headers = register_and_login(Role.ORGANIZER)
 
-        response = client.post("/events", json=_valid_event_payload(), headers=headers)
+        response = client.post("/v1/events", json=_valid_event_payload(), headers=headers)
 
         assert response.status_code == 201
         assert response.get_json()["data"]["name"] == "Concert"
@@ -250,7 +250,7 @@ class TestCreateEventEndpoint:
         payload = _valid_event_payload()
         del payload["name"]
 
-        response = client.post("/events", json=payload, headers=headers)
+        response = client.post("/v1/events", json=payload, headers=headers)
 
         assert response.status_code == 400
 
@@ -258,7 +258,7 @@ class TestCreateEventEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.post(
-            "/events", json=_valid_event_payload(capacity=0), headers=headers
+            "/v1/events", json=_valid_event_payload(capacity=0), headers=headers
         )
 
         assert response.status_code == 400
@@ -268,7 +268,7 @@ class TestCreateEventEndpoint:
         past_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
 
         response = client.post(
-            "/events",
+            "/v1/events",
             json=_valid_event_payload(**_time_fields(past_date)),
             headers=headers,
         )
@@ -279,7 +279,7 @@ class TestCreateEventEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.post(
-            "/events", json=_valid_event_payload(hour=13), headers=headers
+            "/v1/events", json=_valid_event_payload(hour=13), headers=headers
         )
 
         assert response.status_code == 400
@@ -289,7 +289,7 @@ class TestCreateEventEndpoint:
         payload = _valid_event_payload()
         del payload["meridiem"]
 
-        response = client.post("/events", json=payload, headers=headers)
+        response = client.post("/v1/events", json=payload, headers=headers)
 
         assert response.status_code == 400
 
@@ -300,7 +300,7 @@ class TestCreateEventEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
 
         response = client.post(
-            "/events",
+            "/v1/events",
             json=_valid_event_payload(meridiem=bad_meridiem),
             headers=headers,
         )
@@ -312,12 +312,12 @@ class TestGetEventEndpoint:
     def test_get_nonexistent_event_returns_404(self, client, register_and_login):
         _, headers = register_and_login(Role.CUSTOMER)
 
-        response = client.get("/events/999999", headers=headers)
+        response = client.get("/v1/events/999999", headers=headers)
 
         assert response.status_code == 404
 
     def test_get_event_requires_jwt(self, client):
-        response = client.get("/events/1")
+        response = client.get("/v1/events/1")
 
         assert response.status_code == 401
 
@@ -327,14 +327,14 @@ class TestListEventsFilterEndpoint:
 
     def test_industry_filter(self, client, register_and_login):
         _, organizer_headers = register_and_login(Role.ORGANIZER)
-        client.post("/events", json=_valid_event_payload(), headers=organizer_headers)
+        client.post("/v1/events", json=_valid_event_payload(), headers=organizer_headers)
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
         matching = client.get(
-            "/events?industry=MUSIC", headers=customer_headers
+            "/v1/events?industry=MUSIC", headers=customer_headers
         ).get_json()["data"]
         non_matching = client.get(
-            "/events?industry=SPORTS", headers=customer_headers
+            "/v1/events?industry=SPORTS", headers=customer_headers
         ).get_json()["data"]
 
         assert any(e["name"] == "Concert" for e in matching)
@@ -345,12 +345,12 @@ class TestListEventsFilterEndpoint:
         near = FUTURE_DATE
         far = FUTURE_DATE + timedelta(days=90)
         client.post(
-            "/events",
+            "/v1/events",
             json=_valid_event_payload(name="Near Event", **_time_fields(near)),
             headers=organizer_headers,
         )
         client.post(
-            "/events",
+            "/v1/events",
             json=_valid_event_payload(name="Far Event", **_time_fields(far)),
             headers=organizer_headers,
         )
@@ -359,7 +359,7 @@ class TestListEventsFilterEndpoint:
         date_from = (near + timedelta(days=1)).date().isoformat()
         date_to = (far + timedelta(days=1)).date().isoformat()
         response = client.get(
-            f"/events?date_from={date_from}&date_to={date_to}",
+            f"/v1/events?date_from={date_from}&date_to={date_to}",
             headers=customer_headers,
         )
 
@@ -372,12 +372,12 @@ class TestListEventsPaginationEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
         for i in range(3):
             client.post(
-                "/events",
+                "/v1/events",
                 json=_valid_event_payload(name=f"Event {i}"),
                 headers=headers,
             )
 
-        response = client.get("/events", headers=headers)
+        response = client.get("/v1/events", headers=headers)
         body = response.get_json()
 
         assert response.status_code == 200
@@ -388,12 +388,12 @@ class TestListEventsPaginationEndpoint:
         _, headers = register_and_login(Role.ORGANIZER)
         for i in range(5):
             client.post(
-                "/events",
+                "/v1/events",
                 json=_valid_event_payload(name=f"Event {i}"),
                 headers=headers,
             )
 
-        response = client.get("/events?limit=2&offset=2", headers=headers)
+        response = client.get("/v1/events?limit=2&offset=2", headers=headers)
         body = response.get_json()
 
         assert response.status_code == 200
@@ -403,7 +403,7 @@ class TestListEventsPaginationEndpoint:
     def test_limit_over_max_returns_400(self, client, register_and_login):
         _, headers = register_and_login(Role.CUSTOMER)
 
-        response = client.get("/events?limit=101", headers=headers)
+        response = client.get("/v1/events?limit=101", headers=headers)
 
         assert response.status_code == 400
 
@@ -412,12 +412,12 @@ class TestUpdateEventEndpoint:
     def test_customer_role_forbidden(self, client, register_and_login):
         _, organizer_headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=organizer_headers
+            "/v1/events", json=_valid_event_payload(), headers=organizer_headers
         ).get_json()["data"]
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
         response = client.patch(
-            f"/events/{created['id']}",
+            f"/v1/events/{created['id']}",
             json={"venue": "Hall B"},
             headers=customer_headers,
         )
@@ -427,12 +427,12 @@ class TestUpdateEventEndpoint:
     def test_non_owner_organizer_returns_403(self, client, register_and_login):
         _, owner_headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=owner_headers
+            "/v1/events", json=_valid_event_payload(), headers=owner_headers
         ).get_json()["data"]
 
         _, other_headers = register_and_login(Role.ORGANIZER)
         response = client.patch(
-            f"/events/{created['id']}",
+            f"/v1/events/{created['id']}",
             json={"venue": "Hall B"},
             headers=other_headers,
         )
@@ -448,11 +448,11 @@ class TestUpdateEventEndpoint:
         )
         _, headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=headers
+            "/v1/events", json=_valid_event_payload(), headers=headers
         ).get_json()["data"]
 
         response = client.patch(
-            f"/events/{created['id']}", json={"venue": "Hall B"}, headers=headers
+            f"/v1/events/{created['id']}", json={"venue": "Hall B"}, headers=headers
         )
 
         assert response.status_code == 200
@@ -462,12 +462,12 @@ class TestUpdateEventEndpoint:
     def test_past_date_returns_400(self, client, register_and_login):
         _, headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=headers
+            "/v1/events", json=_valid_event_payload(), headers=headers
         ).get_json()["data"]
         past_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
 
         response = client.patch(
-            f"/events/{created['id']}", json=_time_fields(past_date), headers=headers
+            f"/v1/events/{created['id']}", json=_time_fields(past_date), headers=headers
         )
 
         assert response.status_code == 400
@@ -477,11 +477,11 @@ class TestUpdateEventEndpoint:
         partially — there's no existing value to merge a lone field into."""
         _, headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=headers
+            "/v1/events", json=_valid_event_payload(), headers=headers
         ).get_json()["data"]
 
         response = client.patch(
-            f"/events/{created['id']}", json={"hour": 5}, headers=headers
+            f"/v1/events/{created['id']}", json={"hour": 5}, headers=headers
         )
 
         assert response.status_code == 400
@@ -491,42 +491,42 @@ class TestDeleteEventEndpoint:
     def test_owner_can_delete_event_with_no_bookings(self, client, register_and_login):
         _, headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=headers
+            "/v1/events", json=_valid_event_payload(), headers=headers
         ).get_json()["data"]
 
-        response = client.delete(f"/events/{created['id']}", headers=headers)
+        response = client.delete(f"/v1/events/{created['id']}", headers=headers)
 
         assert response.status_code == 200
         assert (
-            client.get(f"/events/{created['id']}", headers=headers).status_code == 404
+            client.get(f"/v1/events/{created['id']}", headers=headers).status_code == 404
         )
 
     def test_customer_role_forbidden(self, client, register_and_login):
         _, organizer_headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=organizer_headers
+            "/v1/events", json=_valid_event_payload(), headers=organizer_headers
         ).get_json()["data"]
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
-        response = client.delete(f"/events/{created['id']}", headers=customer_headers)
+        response = client.delete(f"/v1/events/{created['id']}", headers=customer_headers)
 
         assert response.status_code == 403
 
     def test_non_owner_organizer_returns_403(self, client, register_and_login):
         _, owner_headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=owner_headers
+            "/v1/events", json=_valid_event_payload(), headers=owner_headers
         ).get_json()["data"]
 
         _, other_headers = register_and_login(Role.ORGANIZER)
-        response = client.delete(f"/events/{created['id']}", headers=other_headers)
+        response = client.delete(f"/v1/events/{created['id']}", headers=other_headers)
 
         assert response.status_code == 403
 
     def test_nonexistent_event_returns_404(self, client, register_and_login):
         _, headers = register_and_login(Role.ORGANIZER)
 
-        response = client.delete("/events/999999", headers=headers)
+        response = client.delete("/v1/events/999999", headers=headers)
 
         assert response.status_code == 404
 
@@ -542,18 +542,18 @@ class TestDeleteEventEndpoint:
 
         _, organizer_headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=organizer_headers
+            "/v1/events", json=_valid_event_payload(), headers=organizer_headers
         ).get_json()["data"]
 
         _, customer_headers = register_and_login(Role.CUSTOMER)
         booking_response = client.post(
-            "/bookings",
+            "/v1/bookings",
             json={"event_id": created["id"], "quantity": 1},
             headers=customer_headers,
         )
         assert booking_response.status_code == 201, booking_response.get_json()
 
-        response = client.delete(f"/events/{created['id']}", headers=organizer_headers)
+        response = client.delete(f"/v1/events/{created['id']}", headers=organizer_headers)
 
         assert response.status_code == 409
 
@@ -570,7 +570,7 @@ class TestDeleteEventEndpoint:
 
         _, headers = register_and_login(Role.ORGANIZER)
         created = client.post(
-            "/events", json=_valid_event_payload(), headers=headers
+            "/v1/events", json=_valid_event_payload(), headers=headers
         ).get_json()["data"]
 
         with app.app_context():

@@ -87,7 +87,7 @@ class TestRegisterEndpoint:
 
     def test_register_returns_201_with_user(self, client):
         response = client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": "http-register@test.com",
                 "phone": "555-1234",
@@ -107,7 +107,7 @@ class TestRegisterEndpoint:
     )
     def test_register_invalid_email_returns_400(self, client, bad_email):
         response = client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": bad_email,
                 "phone": "555-1234",
@@ -121,7 +121,7 @@ class TestRegisterEndpoint:
     @pytest.mark.parametrize("short_password", ["", "a", "1234567"])
     def test_register_short_password_returns_400(self, client, short_password):
         response = client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": "short-pw@test.com",
                 "password": short_password,
@@ -133,14 +133,14 @@ class TestRegisterEndpoint:
 
     def test_register_missing_required_field_returns_400(self, client):
         response = client.post(
-            "/auth/register", json={"email": "no-password@test.com", "role": "customer"}
+            "/v1/auth/register", json={"email": "no-password@test.com", "role": "customer"}
         )
 
         assert response.status_code == 400
 
     def test_register_invalid_role_returns_400(self, client):
         response = client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": "bad-role@test.com",
                 "password": "pw123456",
@@ -156,17 +156,17 @@ class TestRegisterEndpoint:
             "password": "pw123456",
             "role": Role.CUSTOMER,
         }
-        first = client.post("/auth/register", json=payload)
+        first = client.post("/v1/auth/register", json=payload)
         assert first.status_code == 201
 
-        second = client.post("/auth/register", json=payload)
+        second = client.post("/v1/auth/register", json=payload)
         assert second.status_code == 400
 
 
 class TestLoginEndpoint:
     def test_login_returns_access_token(self, client):
         client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": "http-login@test.com",
                 "password": "correct-pw",
@@ -175,7 +175,7 @@ class TestLoginEndpoint:
         )
 
         response = client.post(
-            "/auth/login",
+            "/v1/auth/login",
             json={"email": "http-login@test.com", "password": "correct-pw"},
         )
 
@@ -184,7 +184,7 @@ class TestLoginEndpoint:
 
     def test_login_wrong_password_returns_401(self, client):
         client.post(
-            "/auth/register",
+            "/v1/auth/register",
             json={
                 "email": "http-login-2@test.com",
                 "password": "correct-pw",
@@ -193,7 +193,7 @@ class TestLoginEndpoint:
         )
 
         response = client.post(
-            "/auth/login",
+            "/v1/auth/login",
             json={"email": "http-login-2@test.com", "password": "wrong-pw"},
         )
 
@@ -201,7 +201,7 @@ class TestLoginEndpoint:
 
     def test_login_invalid_email_format_returns_400(self, client):
         response = client.post(
-            "/auth/login",
+            "/v1/auth/login",
             json={"email": "not-an-email", "password": "correct-pw"},
         )
 

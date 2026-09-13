@@ -8,7 +8,7 @@ from app.enums import Role
 from app.docs import api, JWT_SECURITY
 from app.responses import success, error
 
-bp = Blueprint("bookings", __name__, url_prefix="/bookings")
+bp = Blueprint("bookings", __name__, url_prefix="/v1/bookings")
 booking_service = BookingService()
 
 
