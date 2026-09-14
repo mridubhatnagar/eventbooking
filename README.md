@@ -102,6 +102,14 @@ All endpoints are versioned under `/v1` (added after the initial demo video was 
 | GET | `/v1/events/:id/reviews` | JWT | reviews for an event |
 | POST | `/v1/webhooks/razorpay` | HMAC signature | real webhook receiver |
 
+**Operational endpoints** (unversioned - infrastructure concerns, not part of the resource API):
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/` | - | serves this README, rendered as HTML |
+| GET | `/health` | - | checks DB connectivity, `200`/`503`; exempt from rate limiting |
+| GET | `/v` | - | the exact commit SHA currently deployed, read from `.git/HEAD`; exempt from rate limiting |
+
 Two more endpoints exist as throwaway stand-ins for Razorpay's own servers, deliberately excluded from the docs above (and **not versioned** - they mimic Razorpay's own URL shape, not this API's) since they aren't part of this API - they run on the separate `mock-razorpay` service, not `app`:
 - `POST /mock/razorpay/orders` (HTTP Basic Auth via `RAZORPAY_KEY_ID`/`KEY_SECRET`) - mocks Razorpay's real Orders API, called by `POST /v1/bookings` to get an `order_id` before creating the booking's payment record
 - `POST /mock/razorpay/simulate-webhook` (`x-api-key` protected) - mocks Razorpay auto-capturing a payment and delivering the resulting webhook back to `app`'s real `/v1/webhooks/razorpay`
