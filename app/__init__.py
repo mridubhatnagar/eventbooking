@@ -1,6 +1,7 @@
 import logging
 import os
 
+import markdown
 from flask import Flask
 from werkzeug.exceptions import HTTPException
 
@@ -56,7 +57,21 @@ def create_app():
     @app.get("/")
     def index():
         with open(readme_path) as f:
-            return f.read(), 200, {"Content-Type": "text/markdown; charset=utf-8"}
+            body = markdown.markdown(f.read(), extensions=["fenced_code", "tables"])
+        page = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<title>Event Booking System</title><style>"
+            "body{max-width:860px;margin:2rem auto;padding:0 1rem;"
+            "font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"
+            "line-height:1.6;color:#1e1e1e}"
+            "pre{background:#f4f4f4;padding:0.75rem;overflow-x:auto;border-radius:4px}"
+            "code{background:#f4f4f4;padding:0.1rem 0.3rem;border-radius:3px}"
+            "pre code{background:none;padding:0}"
+            "table{border-collapse:collapse}"
+            "th,td{border:1px solid #ccc;padding:0.4rem 0.7rem}"
+            "</style></head><body>" + body + "</body></html>"
+        )
+        return page, 200, {"Content-Type": "text/html; charset=utf-8"}
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):

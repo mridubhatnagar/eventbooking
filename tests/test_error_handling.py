@@ -29,9 +29,11 @@ class TestUnexpectedErrorHandler:
 
 
 class TestIndexRoute:
-    def test_root_returns_readme_content(self, client):
+    def test_root_returns_rendered_readme(self, client):
         response = client.get("/")
 
         assert response.status_code == 200
-        assert response.content_type.startswith("text/markdown")
-        assert "Event Booking System" in response.get_data(as_text=True)
+        assert response.content_type.startswith("text/html")
+        body = response.get_data(as_text=True)
+        assert "Event Booking System" in body
+        assert "<h1>" in body
