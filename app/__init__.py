@@ -1,4 +1,5 @@
 import logging
+import os
 
 from flask import Flask
 from werkzeug.exceptions import HTTPException
@@ -47,6 +48,15 @@ def create_app():
     app.register_blueprint(reviews_bp)
 
     api.register(app)
+
+    readme_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "README.md"
+    )
+
+    @app.get("/")
+    def index():
+        with open(readme_path) as f:
+            return f.read(), 200, {"Content-Type": "text/markdown; charset=utf-8"}
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):

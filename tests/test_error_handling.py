@@ -26,3 +26,12 @@ class TestUnexpectedErrorHandler:
         response = client.get("/this-route-does-not-exist")
 
         assert response.status_code == 404
+
+
+class TestIndexRoute:
+    def test_root_returns_readme_content(self, client):
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert response.content_type.startswith("text/markdown")
+        assert "Event Booking System" in response.get_data(as_text=True)
