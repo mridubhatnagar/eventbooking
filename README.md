@@ -5,7 +5,6 @@ A backend-only REST API for booking event tickets, with two roles — **Event Or
 Full design rationale (data model, payment flow, deferred items) lives in [`PLAN.md`](PLAN.md). Architecture and coding conventions live in [`CLAUDE.md`](CLAUDE.md). Individual design/judgment calls made along the way, with reasoning, live in [`decisions.md`](decisions.md).
 
 - **Live deployment**: `https://eventbooking.mridulabs.dev` — see [Deployment](#deployment) below
-- **Demo walkthrough**: [`DEMO.md`](DEMO.md) (rationale) / [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) (exact call sequence for recording)
 - **Architecture diagram + DBML schema**: [`docs/architecture/`](docs/architecture/)
 - **Runnable API collection**: [`bruno/`](bruno/) (Bruno collection, alternative to Swagger UI — see its own README for setup)
 
