@@ -22,6 +22,28 @@ from app.jobs.model import Job  # noqa: F401
 from app.organizer_profiles.model import OrganizerProfile  # noqa: F401
 from app.reviews.model import Review  # noqa: F401
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _read_git_commit():
+    """Reads the commit SHA directly from .git/ (no git binary needed in the
+    image — python:3.11-slim doesn't have one installed). Resolves one level
+    of symbolic ref (HEAD -> refs/heads/<branch> -> the actual SHA), which is
+    as far as a normal checkout ever needs; falls back to "unknown" for any
+    layout this doesn't expect (e.g. .git missing entirely) rather than
+    failing the whole app over a diagnostic endpoint."""
+    try:
+        git_dir = os.path.join(PROJECT_ROOT, ".git")
+        with open(os.path.join(git_dir, "HEAD")) as f:
+            head = f.read().strip()
+        if head.startswith("ref:"):
+            ref_path = head.split(" ", 1)[1]
+            with open(os.path.join(git_dir, ref_path)) as f:
+                return f.read().strip()
+        return head
+    except OSError:
+        return "unknown"
+
 
 def create_app():
     app = Flask(__name__)
@@ -50,9 +72,8 @@ def create_app():
 
     api.register(app)
 
-    readme_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "README.md"
-    )
+    readme_path = os.path.join(PROJECT_ROOT, "README.md")
+    git_commit = _read_git_commit()
 
     @app.get("/")
     def index():
@@ -86,6 +107,14 @@ def create_app():
             app.logger.exception("Health check failed")
             return error("database unreachable", 503)
         return success({"status": "ok"})
+
+    @app.get("/v")
+    @limiter.exempt
+    def version():
+        """Which commit is actually running in production right now — read
+        once at process startup (git_commit, above), not per-request, since
+        it can't change without a container restart anyway."""
+        return success({"commit": git_commit})
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):

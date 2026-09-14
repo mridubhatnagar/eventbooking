@@ -62,3 +62,12 @@ class TestHealthRoute:
 
         assert response.status_code == 503
         assert response.get_json()["data"] is None
+
+
+class TestVersionRoute:
+    def test_returns_current_commit(self, client):
+        response = client.get("/v")
+
+        assert response.status_code == 200
+        commit = response.get_json()["data"]["commit"]
+        assert isinstance(commit, str) and len(commit) > 0
