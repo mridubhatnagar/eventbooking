@@ -33,6 +33,6 @@ Identified during a senior-engineer-level review of the core build. None of thes
 
 13. ~~Pagination on `GET /events` and `GET /bookings`~~ — **not deferred**, implemented on `feature/performance-improvements`, merged via PR #2: `?limit=`/`?offset=` on both endpoints, `total`/`limit`/`offset` in the response `meta`.
 14. ~~Explicit DB indexes on filtered/joined columns~~ — **not deferred**, also implemented on `feature/performance-improvements`: `Event.city`, `Event.date`, `Event.user_id`, `Booking.user_id`, `Booking.event_id` (migration generated and applied against real Postgres). `OrganizerProfile.user_id` already had an index via its `unique=True` constraint.
-15. A health-check endpoint for load balancer / orchestrator liveness/readiness probes.
+15. ~~A health-check endpoint for load balancer / orchestrator liveness/readiness probes~~ — **not deferred**: `GET /health` checks DB connectivity (`SELECT 1`), returns `200` or `503`. Exempted from rate limiting since monitoring pings it frequently. Unversioned (no `/v1`) — it's an operational endpoint, not part of the API's resource model.
 16. ~~Stronger password policy on registration~~ — **not deferred**, see decision 24 (`min_length=8`).
 17. ~~Rate limiting~~ — **not deferred**, see decision 29.

@@ -37,3 +37,28 @@ class TestIndexRoute:
         body = response.get_data(as_text=True)
         assert "Event Booking System" in body
         assert "<h1>" in body
+
+
+class TestHealthRoute:
+    def test_healthy_when_db_reachable(self, client):
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.get_json()["data"]["status"] == "ok"
+
+    def test_unhealthy_when_db_unreachable(self, client, monkeypatch):
+        from sqlalchemy.orm import Session
+
+        def _boom(*a, **kw):
+            raise RuntimeError("connection refused")
+
+        # Patch the Session class itself, not a resolved db.session instance —
+        # Flask-SQLAlchemy's session is scoped per app/request context, so an
+        # instance-level patch made outside the test client's own request
+        # context could silently miss the actual session the view uses.
+        monkeypatch.setattr(Session, "execute", _boom)
+
+        response = client.get("/health")
+
+        assert response.status_code == 503
+        assert response.get_json()["data"] is None

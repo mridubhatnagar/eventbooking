@@ -9,7 +9,7 @@ from app.config import Config
 from app.extensions import db, jwt, migrate, configure_celery, limiter
 from app.exceptions import TaskEnqueueError, GatewayError
 from app.docs import api
-from app.responses import error
+from app.responses import success, error
 
 # Import every domain's model so SQLAlchemy's metadata knows about all
 # tables — Alembic's autogenerate needs every model imported before it
@@ -72,6 +72,20 @@ def create_app():
             "</style></head><body>" + body + "</body></html>"
         )
         return page, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+    @app.get("/health")
+    @limiter.exempt
+    def health():
+        """Liveness + readiness in one: for a single-instance deployment
+        (no orchestrator distinguishing the two), a DB connectivity check
+        is the useful signal — the process being up but unable to reach
+        Postgres is exactly the failure mode worth reporting as unhealthy."""
+        try:
+            db.session.execute(db.text("SELECT 1"))
+        except Exception:
+            app.logger.exception("Health check failed")
+            return error("database unreachable", 503)
+        return success({"status": "ok"})
 
     @app.errorhandler(TaskEnqueueError)
     def handle_task_enqueue_error(e):
